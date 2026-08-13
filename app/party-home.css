@@ -319,11 +319,18 @@
   padding: 28px;
   text-align: center;
   isolation: isolate;
+  cursor: pointer;
   transition:
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
     border-color 220ms ease,
     background-color 220ms ease,
     box-shadow 220ms ease;
+}
+
+.step-grid article:focus-visible {
+  outline: 2px solid #6f91ff;
+  outline-offset: 4px;
+  border-color: #4d7cff;
 }
 .step-grid article > span {
   position: absolute;
@@ -537,6 +544,13 @@
 .party-dialog input:focus {
   border-color: #4d7cff;
 }
+
+.party-dialog-error {
+  display: block;
+  margin-top: 8px;
+  color: #ff7189;
+  font-size: 12px;
+}
 .party-dialog > div {
   display: flex;
   justify-content: flex-end;
@@ -548,14 +562,36 @@
   color: #dce0e7;
   border-radius: 6px;
   padding: 9px 13px;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.party-dialog > div button:first-child:hover {
+  background: #30363f;
+  border-color: #4a5360;
+  color: #ffffff;
 }
 .party-dialog > div button:last-child {
-  background: #4d7cff;
-  color: white;
-  border-color: #4d7cff;
+  background: #292e36;
+  color: #737b88;
+  border-color: #363d48;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.party-dialog > div button:last-child:not(:disabled) {
+  background: #4d7cff;
+  color: white;
+  border-color: #4d7cff;
+  cursor: pointer;
+}
+
+.party-dialog > div button:last-child:disabled {
+  cursor: not-allowed;
 }
 @media (max-width: 900px) {
   .party-hero {

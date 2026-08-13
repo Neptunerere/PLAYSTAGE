@@ -10,7 +10,7 @@ import {
 } from "@radix-ui/react-icons";
 import { Dialog } from "radix-ui";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
 
 const missionIdeas = [
   {
@@ -36,14 +36,31 @@ const missionIdeas = [
   },
 ];
 
-function makeRoomCode() {
-  return `party-${Math.random().toString(36).slice(2, 7)}`;
+function sanitizeRoomCode(value: string) {
+  return value.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20);
+}
+
+function preventInvalidRoomCodeKey(event: KeyboardEvent<HTMLInputElement>) {
+  if (
+    event.nativeEvent.isComposing ||
+    event.key === "Process" ||
+    (event.key.length === 1 && !/[a-zA-Z0-9-]/.test(event.key))
+  ) {
+    event.preventDefault();
+  }
+}
+
+function preventInvalidRoomCodeInput(event: FormEvent<HTMLInputElement>) {
+  const value = (event.nativeEvent as InputEvent).data;
+  if (value && /[^a-zA-Z0-9-]/.test(value)) event.preventDefault();
 }
 
 export default function PartyHome() {
   const router = useRouter();
   const [roomCode, setRoomCode] = useState("");
   const [joinOpen, setJoinOpen] = useState(false);
+  const [joinPending, setJoinPending] = useState(false);
+  const [joinError, setJoinError] = useState("");
   const [activeSection, setActiveSection] = useState("");
 
   useEffect(() => {
@@ -112,12 +129,44 @@ export default function PartyHome() {
   }
 
   function createParty() {
-    router.push(`/studio?room=${makeRoomCode()}`);
+    router.push("/studio");
   }
 
-  function joinParty() {
+  function openHowStep(number: string) {
+    if (number === "03") setJoinOpen(true);
+    else createParty();
+  }
+
+  async function joinParty() {
     const code = roomCode.trim();
-    if (code) router.push(`/live?room=${encodeURIComponent(code)}`);
+    if (!code || joinPending) return;
+
+    setJoinPending(true);
+    setJoinError("");
+
+    try {
+      const response = await fetch(`/api/rooms/${encodeURIComponent(code)}`, {
+        cache: "no-store",
+      });
+
+      if (response.status === 404) {
+        setJoinError("존재하지 않는 방 코드입니다.");
+        return;
+      }
+
+      if (!response.ok) {
+        setJoinError(
+          "방 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        );
+        return;
+      }
+
+      router.push(`/live?room=${encodeURIComponent(code)}`);
+    } catch {
+      setJoinError("서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setJoinPending(false);
+    }
   }
 
   return (
@@ -172,7 +221,13 @@ export default function PartyHome() {
             <button className="create-party" onClick={createParty}>
               <PlusIcon /> 새 파티 만들기
             </button>
-            <Dialog.Root open={joinOpen} onOpenChange={setJoinOpen}>
+            <Dialog.Root
+              open={joinOpen}
+              onOpenChange={(open) => {
+                setJoinOpen(open);
+                if (!open) setJoinError("");
+              }}
+            >
               <Dialog.Trigger asChild>
                 <button className="join-party">
                   <EnterIcon /> 방 코드로 참가
@@ -190,19 +245,39 @@ export default function PartyHome() {
                     <input
                       autoFocus
                       value={roomCode}
-                      onChange={(event) => setRoomCode(event.target.value)}
-                      onKeyDown={(event) =>
-                        event.key === "Enter" && joinParty()
-                      }
+                      onChange={(event) => {
+                        setRoomCode(sanitizeRoomCode(event.target.value));
+                        setJoinError("");
+                      }}
+                      onBeforeInput={preventInvalidRoomCodeInput}
+                      onKeyDown={(event) => {
+                        preventInvalidRoomCodeKey(event);
+                        if (!event.defaultPrevented && event.key === "Enter")
+                          void joinParty();
+                      }}
                       placeholder="예: party-a1b2c"
+                      inputMode="text"
+                      pattern="[A-Za-z0-9-]+"
+                      maxLength={20}
+                      autoCapitalize="none"
+                      spellCheck={false}
                     />
+                    {joinError && (
+                      <span className="party-dialog-error" role="alert">
+                        {joinError}
+                      </span>
+                    )}
                   </label>
                   <div>
                     <Dialog.Close asChild>
                       <button>취소</button>
                     </Dialog.Close>
-                    <button onClick={joinParty}>
-                      파티 참가 <ArrowRightIcon />
+                    <button
+                      onClick={() => void joinParty()}
+                      disabled={!roomCode || joinPending}
+                    >
+                      {joinPending ? "확인 중..." : "파티 참가"}
+                      {!joinPending && <ArrowRightIcon />}
                     </button>
                   </div>
                 </Dialog.Content>
@@ -266,7 +341,19 @@ export default function PartyHome() {
             ["02", "화면 공유", "게임 화면과 시스템 소리를 함께 띄워요."],
             ["03", "미션 도전", "친구들이 미션을 걸고 성공을 판정해요."],
           ].map(([number, title, body]) => (
-            <article key={number}>
+            <article
+              key={number}
+              role="button"
+              tabIndex={0}
+              aria-label={`${title} 시작하기`}
+              onClick={() => openHowStep(number)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openHowStep(number);
+                }
+              }}
+            >
               <span>{number}</span>
               <div className="step-icon">
                 <CheckCircledIcon />
