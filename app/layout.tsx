@@ -17,6 +17,11 @@ const jua = localFont({
 export const metadata: Metadata = {
   title: "PLAYSTAGE — 친구들과 미션 걸고 플레이",
   description: "친구를 초대하고, 화면을 공유하고, 오늘의 미션을 시작하세요.",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    shortcut: "/icon.png",
+    apple: [{ url: "/icon.png", sizes: "512x512", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
