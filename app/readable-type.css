@@ -1,0 +1,106 @@
+/* 주아체의 둥근 획이 작은 화면에서도 선명하게 보이도록 기본 글자 크기를 보정합니다. */
+body {
+  font-size: 16px;
+}
+
+button,
+input,
+textarea,
+select {
+  font-size: 14px;
+}
+
+.party-header nav a,
+.party-login {
+  font-size: 14px;
+}
+
+.eyebrow,
+.section-title > span {
+  font-size: 12px;
+}
+
+.party-hero-copy > p {
+  font-size: 18px;
+}
+
+.private-note,
+.online-friends,
+.preview-info small,
+.section-title p,
+.step-grid p,
+.idea-grid p,
+.party-home footer {
+  font-size: 13px;
+}
+
+.step-grid h3,
+.idea-grid h3 {
+  font-size: 17px;
+}
+
+.preview-live,
+.preview-mission > span,
+.idea-thumb i {
+  font-size: 11px;
+}
+
+.preview-mission > b,
+.floating-chat {
+  font-size: 14px;
+}
+
+.room-header-meta,
+.party-pill,
+.active-mission-strip > div span,
+.party-tab-list button,
+.mission-form input,
+.mission-form button,
+.mission-card > div:first-child span,
+.mission-card small,
+.mission-timer,
+.vote-buttons button,
+.chat-tab form input {
+  font-size: 12px;
+}
+
+.mission-card h3,
+.active-mission-strip > div b {
+  font-size: 15px;
+}
+
+.messages p,
+.messages b,
+.notice p,
+.channel-row span,
+.stream-title p,
+.studio-heading p,
+.studio-controls label,
+.studio-error,
+.studio-chat,
+.preview-empty span {
+  font-size: 13px;
+}
+
+.notice h2,
+.panel h2,
+.studio-chat > div,
+.preview-empty b {
+  font-size: 16px;
+}
+
+.profile,
+.studio-page > header a:last-child,
+.studio-live {
+  font-size: 14px;
+}
+
+@media (max-width: 620px) {
+  body {
+    font-size: 15px;
+  }
+
+  .party-hero-copy > p {
+    font-size: 16px;
+  }
+}
