@@ -1004,25 +1004,15 @@ body {
   color: #ffffff;
 }
 .brand-mark {
-  position: relative;
-  width: 20px;
-  height: 21px;
-}
-.brand-mark i {
-  position: absolute;
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
-  width: 18px;
-  height: 18px;
-  background: var(--cyan);
-  left: 0;
-  top: 1px;
-}
-.brand-mark i + i {
-  width: 12px;
-  height: 12px;
-  background: var(--blue);
-  left: 4px;
-  top: 4px;
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 4px;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 1px rgba(33, 215, 207, 0.38),
+    0 0 10px rgba(33, 215, 207, 0.16);
 }
 .header-actions,
 .profile {

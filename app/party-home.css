@@ -120,6 +120,47 @@
   gap: 8px;
   font-weight: 800;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.hero-actions button svg {
+  position: relative;
+  z-index: 1;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hero-actions button::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  z-index: -1;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 65%
+  );
+  transform: translateX(-75%) rotate(8deg);
+  transition: transform 420ms ease;
+}
+.hero-actions button:hover {
+  transform: translateY(-3px) scale(1.025);
+}
+.hero-actions button:hover::after {
+  transform: translateX(75%) rotate(8deg);
+}
+.hero-actions button:active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: 80ms;
+}
+.hero-actions button:focus-visible {
+  outline: 2px solid #8da7ff;
+  outline-offset: 3px;
 }
 .create-party {
   border: 0;
@@ -127,10 +168,27 @@
   color: white;
   box-shadow: 0 10px 25px #4d7cff35;
 }
+.create-party:hover {
+  background: #608bff;
+  box-shadow:
+    0 14px 32px #4d7cff5c,
+    0 0 0 1px #85a2ff44;
+}
+.create-party:hover svg {
+  transform: rotate(90deg) scale(1.08);
+}
 .join-party {
   border: 1px solid #3a404a;
   background: #191d21;
   color: #eef1f7;
+}
+.join-party:hover {
+  border-color: #657594;
+  background: #222833;
+  box-shadow: 0 12px 28px #05070b66;
+}
+.join-party:hover svg {
+  transform: translateX(3px);
 }
 .private-note {
   display: flex;

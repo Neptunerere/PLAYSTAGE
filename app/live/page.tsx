@@ -242,10 +242,7 @@ export default function PartyRoom() {
       <main className="site dark party-room">
         <header className="topbar">
           <Link className="brand" href="/">
-            <span className="brand-mark">
-              <i />
-              <i />
-            </span>
+            <img className="brand-mark" src="/icon.png" alt="" />
             <span>
               PLAY<span>STAGE</span>
             </span>

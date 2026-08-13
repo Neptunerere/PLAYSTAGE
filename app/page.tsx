@@ -173,10 +173,7 @@ export default function PartyHome() {
     <main className="party-home">
       <header className="party-header">
         <a className="brand" href="/">
-          <span className="brand-mark">
-            <i />
-            <i />
-          </span>
+          <img className="brand-mark" src="/icon.png" alt="" />
           <span>
             PLAY<span>STAGE</span>
           </span>
@@ -399,10 +396,7 @@ export default function PartyHome() {
 
       <footer>
         <a className="brand" href="/">
-          <span className="brand-mark">
-            <i />
-            <i />
-          </span>
+          <img className="brand-mark" src="/icon.png" alt="" />
           <span>
             PLAY<span>STAGE</span>
           </span>
