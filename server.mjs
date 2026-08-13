@@ -14,6 +14,7 @@ await app.prepare();
 const server = createServer((request, response) => handle(request, response));
 const wss = new WebSocketServer({ noServer: true });
 const rooms = new Map();
+const roomTitles = new Map();
 
 function roomClients(roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Map());
@@ -55,7 +56,19 @@ wss.on("connection", (socket, request, clientInfo) => {
       return;
     }
 
+    if (message.type === "room-info" && role === "broadcaster") {
+      const title = String(message.title || "")
+        .trim()
+        .slice(0, 50);
+      if (!title) return;
+      roomTitles.set(roomId, title);
+      broadcast(roomId, { type: "room-info", title });
+      return;
+    }
+
     if (message.type === "viewer-ready") {
+      const title = roomTitles.get(roomId);
+      if (title) send(socket, { type: "room-info", title });
       const currentBroadcaster = [...clients].find(
         ([, client]) => client.role === "broadcaster",
       );
@@ -137,14 +150,20 @@ wss.on("connection", (socket, request, clientInfo) => {
     clients.delete(id);
     broadcast(roomId, { type: "peer-left", from: id, role });
     if (role === "broadcaster") broadcast(roomId, { type: "broadcast-ended" });
-    if (clients.size === 0) rooms.delete(roomId);
+    if (clients.size === 0) {
+      rooms.delete(roomId);
+      roomTitles.delete(roomId);
+    }
   });
 });
 
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
   if (url.pathname !== "/ws") return;
-  const roomId = (url.searchParams.get("room") || "main").slice(0, 64);
+  const roomId =
+    (url.searchParams.get("room") || "main")
+      .replace(/[^a-zA-Z0-9-]/g, "")
+      .slice(0, 20) || "main";
   const role =
     url.searchParams.get("role") === "broadcaster" ? "broadcaster" : "viewer";
   wss.handleUpgrade(request, socket, head, (ws) =>

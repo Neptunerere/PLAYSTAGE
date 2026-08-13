@@ -22,6 +22,7 @@ type Mission = {
 };
 type Msg = {
   type: string;
+  title?: string;
   id?: string;
   from?: string;
   offer?: RTCSessionDescriptionInit;
@@ -49,6 +50,7 @@ export default function PartyRoom() {
     socket = useRef<WebSocket | null>(null),
     peer = useRef<RTCPeerConnection | null>(null);
   const [room, setRoom] = useState("pixel-quest"),
+    [roomTitle, setRoomTitle] = useState("친구 게임 파티"),
     [status, setStatus] = useState("호스트의 화면 공유를 기다리는 중"),
     [connected, setConnected] = useState(false),
     [audio, setAudio] = useState(false),
@@ -66,7 +68,10 @@ export default function PartyRoom() {
       },
     ]);
   useEffect(() => {
-    const r = new URLSearchParams(location.search).get("room") || "pixel-quest";
+    const requestedRoom =
+      new URLSearchParams(location.search).get("room") || "pixel-quest";
+    const r =
+      requestedRoom.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20) || "pixel-quest";
     setRoom(r);
     const ws = new WebSocket(
       `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${encodeURIComponent(r)}&role=viewer`,
@@ -79,7 +84,8 @@ export default function PartyRoom() {
     ws.onclose = () => setConnected(false);
     ws.onmessage = async (e) => {
       const m = JSON.parse(e.data) as Msg;
-      if (m.type === "offer" && m.offer && m.from) {
+      if (m.type === "room-info" && m.title) setRoomTitle(m.title);
+      else if (m.type === "offer" && m.offer && m.from) {
         peer.current?.close();
         const pc = new RTCPeerConnection({ iceServers: [] });
         peer.current = pc;
@@ -194,7 +200,7 @@ export default function PartyRoom() {
           <div className="stream-title">
             <div>
               <span className="party-pill">FRIENDS PARTY</span>
-              <h1>금요일 게임 파티</h1>
+              <h1>{roomTitle}</h1>
               <p>친구들끼리 미션 걸고 플레이</p>
             </div>
             <Link className="studio-link" href={`/studio?room=${room}`}>
@@ -230,7 +236,7 @@ export default function PartyRoom() {
                   onChange={(e) => setMissionTitle(e.target.value)}
                   placeholder="친구에게 미션 걸기"
                 />
-                <button>
+                <button disabled={!missionTitle.trim()}>
                   <PlusIcon /> 등록
                 </button>
               </form>
@@ -285,7 +291,7 @@ export default function PartyRoom() {
                   onChange={(e) => setChat(e.target.value)}
                   placeholder="메시지를 입력하세요"
                 />
-                <button>
+                <button disabled={!chat.trim()}>
                   <PaperPlaneIcon />
                 </button>
               </form>

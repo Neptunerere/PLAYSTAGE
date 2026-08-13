@@ -163,6 +163,13 @@
   font-size: 9px;
   font-weight: 800;
 }
+
+.mission-form button:disabled,
+.chat-tab form button:disabled {
+  background: #292e36;
+  color: #737b88;
+  cursor: not-allowed;
+}
 .mission-list {
   padding: 12px;
   display: flex;
