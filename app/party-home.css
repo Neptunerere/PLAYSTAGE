@@ -263,6 +263,8 @@
   padding: 10px 13px;
   font-size: 10px;
   box-shadow: 0 10px 28px #0005;
+  opacity: 0;
+  will-change: transform, opacity;
 }
 .floating-chat b {
   color: #4d7cff;
@@ -271,10 +273,56 @@
 .chat-one {
   left: -35px;
   bottom: 92px;
+  transform-origin: 82% 100%;
+  animation: chat-one-pop 5s ease-in-out infinite;
 }
 .chat-two {
   right: -28px;
   bottom: 145px;
+  transform-origin: 18% 100%;
+  animation: chat-two-pop 5s ease-in-out infinite;
+}
+@keyframes chat-one-pop {
+  0%,
+  4% {
+    opacity: 0;
+    transform: translateY(13px) scale(0.72);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.05);
+  }
+  14%,
+  87% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.97);
+  }
+}
+@keyframes chat-two-pop {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateY(13px) scale(0.72);
+  }
+  24% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.05);
+  }
+  28%,
+  87% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.97);
+  }
 }
 .how-section,
 .mission-section {
