@@ -137,8 +137,12 @@ export default function PartyOverlay({
         <div
           className="overlay-tools"
           onPointerDown={(e) => e.stopPropagation()}
+          onPointerMove={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <button
+            type="button"
             className={tool === "ping" ? "active" : ""}
             onClick={() => setTool("ping")}
             title="핑"
@@ -146,6 +150,7 @@ export default function PartyOverlay({
             <CursorArrowIcon />
           </button>
           <button
+            type="button"
             className={tool === "draw" ? "active" : ""}
             onClick={() => setTool("draw")}
             title="낙서"
@@ -153,11 +158,15 @@ export default function PartyOverlay({
             <Pencil2Icon />
           </button>
           {["😂", "🔥", "👏"].map((e) => (
-            <button key={e} onClick={() => react(e)}>
+            <button type="button" key={e} onClick={() => react(e)}>
               {e}
             </button>
           ))}
-          <button onClick={() => send({ kind: "clear" })} title="모두 지우기">
+          <button
+            type="button"
+            onClick={() => send({ kind: "clear" })}
+            title="모두 지우기"
+          >
             <TrashIcon />
           </button>
         </div>

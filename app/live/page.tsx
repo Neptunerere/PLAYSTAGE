@@ -2,14 +2,18 @@
 import Link from "next/link";
 import {
   ChatBubbleIcon,
+  CheckCircledIcon,
+  ChevronDownIcon,
   ClockIcon,
+  EnterFullScreenIcon,
+  ExitFullScreenIcon,
   PaperPlaneIcon,
   PersonIcon,
   PlusIcon,
   SpeakerLoudIcon,
   TargetIcon,
 } from "@radix-ui/react-icons";
-import { Tabs } from "radix-ui";
+import { Dialog, Select, Tabs, Toast } from "radix-ui";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import PartyOverlay, { OverlayItem } from "../components/party-overlay";
 type Chat = { id: string; name: string; text: string };
@@ -29,8 +33,10 @@ type Msg = {
   name?: string;
   text?: string;
   mission?: Mission;
+  missions?: Mission[];
   missionId?: string;
   vote?: "success" | "fail";
+  quality?: "auto" | "1080" | "720" | "480";
   item?: OverlayItem;
 };
 const iceDone = (pc: RTCPeerConnection) =>
@@ -47,6 +53,7 @@ const iceDone = (pc: RTCPeerConnection) =>
       });
 export default function PartyRoom() {
   const video = useRef<HTMLVideoElement>(null),
+    playerContainer = useRef<HTMLDivElement>(null),
     socket = useRef<WebSocket | null>(null),
     peer = useRef<RTCPeerConnection | null>(null);
   const [room, setRoom] = useState("pixel-quest"),
@@ -58,32 +65,61 @@ export default function PartyRoom() {
     [missionTitle, setMissionTitle] = useState(""),
     [messages, setMessages] = useState<Chat[]>([]),
     [overlay, setOverlay] = useState<OverlayItem[]>([]),
-    [missions, setMissions] = useState<Mission[]>([
-      {
-        id: "starter",
-        title: "30분 안에 첫 보스 클리어",
-        creator: "민수",
-        success: 2,
-        fail: 0,
-      },
-    ]);
+    [missions, setMissions] = useState<Mission[]>([]),
+    [copyToastOpen, setCopyToastOpen] = useState(false),
+    [nickname, setNickname] = useState(""),
+    [nicknameDraft, setNicknameDraft] = useState(""),
+    [roomAvailable, setRoomAvailable] = useState<boolean | null>(null),
+    [quality, setQuality] = useState("auto"),
+    [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
+    const updateFullscreen = () =>
+      setFullscreen(document.fullscreenElement === playerContainer.current);
+    document.addEventListener("fullscreenchange", updateFullscreen);
+    return () =>
+      document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
     const requestedRoom =
       new URLSearchParams(location.search).get("room") || "pixel-quest";
     const r =
       requestedRoom.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20) || "pixel-quest";
     setRoom(r);
-    const ws = new WebSocket(
-      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${encodeURIComponent(r)}&role=viewer`,
-    );
-    socket.current = ws;
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: "viewer-ready" }));
-    };
-    ws.onclose = () => setConnected(false);
-    ws.onmessage = async (e) => {
-      const m = JSON.parse(e.data) as Msg;
+    let ws: WebSocket | null = null;
+
+    const connect = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${encodeURIComponent(r)}`, {
+          cache: "no-store",
+        });
+        if (cancelled) return;
+        if (!response.ok) {
+          setRoomAvailable(false);
+          return;
+        }
+        const result = (await response.json()) as {
+          room?: { title?: string };
+        };
+        setRoomAvailable(true);
+        if (result.room?.title) setRoomTitle(result.room.title);
+      } catch {
+        if (!cancelled) setRoomAvailable(false);
+        return;
+      }
+
+      const currentWs = new WebSocket(
+        `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${encodeURIComponent(r)}&role=viewer`,
+      );
+      ws = currentWs;
+      socket.current = currentWs;
+      currentWs.onopen = () => {
+        setConnected(true);
+        currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+      };
+      currentWs.onclose = () => setConnected(false);
+      currentWs.onmessage = async (e) => {
+        const m = JSON.parse(e.data) as Msg;
       if (m.type === "room-info" && m.title) setRoomTitle(m.title);
       else if (m.type === "offer" && m.offer && m.from) {
         peer.current?.close();
@@ -100,7 +136,7 @@ export default function PartyRoom() {
         await pc.setRemoteDescription(m.offer);
         await pc.setLocalDescription(await pc.createAnswer());
         await iceDone(pc);
-        ws.send(
+        currentWs.send(
           JSON.stringify({
             type: "answer",
             target: m.from,
@@ -112,13 +148,13 @@ export default function PartyRoom() {
           ...v.slice(-99),
           { id: m.id!, name: m.name!, text: m.text! },
         ]);
+      else if (m.type === "missions-sync" && m.missions)
+        setMissions(m.missions);
       else if (m.type === "mission" && m.mission)
         setMissions((v) => [m.mission!, ...v]);
-      else if (m.type === "mission-vote" && m.missionId && m.vote)
+      else if (m.type === "mission-updated" && m.mission)
         setMissions((v) =>
-          v.map((x) =>
-            x.id === m.missionId ? { ...x, [m.vote!]: x[m.vote!] + 1 } : x,
-          ),
+          v.map((x) => (x.id === m.mission!.id ? m.mission! : x)),
         );
       else if (m.type === "overlay" && m.item)
         setOverlay((v) =>
@@ -126,11 +162,22 @@ export default function PartyRoom() {
             ? []
             : [...v.filter((x) => Date.now() - x.createdAt < 6000), m.item!],
         );
-      else if (m.type === "broadcast-ended")
+      else if (m.type === "broadcast-started") {
+        setStatus("호스트의 화면을 다시 연결하는 중");
+        currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+      } else if (m.type === "broadcast-reconnecting")
+        setStatus("호스트의 재접속을 기다리는 중");
+      else if (m.type === "room-closed") {
+        setStatus("호스트 연결이 종료되어 방이 닫혔습니다");
+        setRoomAvailable(false);
+      } else if (m.type === "broadcast-ended")
         setStatus("호스트가 화면 공유를 종료했습니다");
+      };
     };
+    void connect();
     return () => {
-      ws.close();
+      cancelled = true;
+      ws?.close();
       peer.current?.close();
     };
   }, []);
@@ -140,14 +187,14 @@ export default function PartyRoom() {
   const submitChat = (e: FormEvent) => {
     e.preventDefault();
     if (chat.trim()) {
-      send({ type: "chat", name: "친구", text: chat });
+      send({ type: "chat", name: nickname, text: chat });
       setChat("");
     }
   };
   const addMission = (e: FormEvent) => {
     e.preventDefault();
     if (missionTitle.trim()) {
-      send({ type: "mission-create", name: "친구", title: missionTitle });
+      send({ type: "mission-create", name: nickname, title: missionTitle });
       setMissionTitle("");
     }
   };
@@ -158,8 +205,26 @@ export default function PartyRoom() {
       video.current.play().catch(() => {});
     }
   };
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await playerContainer.current?.requestFullscreen();
+  };
+  const changeQuality = (value: string) => {
+    setQuality(value);
+    send({ type: "quality-request", quality: value });
+  };
+  const copyRoomCode = async () => {
+    await navigator.clipboard.writeText(room);
+    setCopyToastOpen(true);
+  };
+  const confirmNickname = (e: FormEvent) => {
+    e.preventDefault();
+    const nextNickname = nicknameDraft.trim();
+    if (nextNickname) setNickname(nextNickname);
+  };
   return (
-    <main className="site dark party-room">
+    <Toast.Provider swipeDirection="down" duration={2600}>
+      <main className="site dark party-room">
       <header className="topbar">
         <Link className="brand" href="/">
           <span className="brand-mark">
@@ -172,17 +237,17 @@ export default function PartyRoom() {
         </Link>
         <div className="room-header-meta">
           🔒 방 코드 <b>{room}</b>
-          <button onClick={() => navigator.clipboard?.writeText(room)}>
+          <button type="button" onClick={copyRoomCode}>
             복사
           </button>
         </div>
         <div className="profile">
-          <PersonIcon /> 친구
+          <PersonIcon /> {nickname || "닉네임 설정 중"}
         </div>
       </header>
       <div className="layout realtime-layout">
         <section className="broadcast">
-          <div className="player realtime-player">
+          <div className="player realtime-player" ref={playerContainer}>
             <video ref={video} playsInline autoPlay muted />
             <PartyOverlay
               items={overlay}
@@ -192,8 +257,57 @@ export default function PartyRoom() {
               {status}
             </div>
             <div className="player-controls">
-              <button className="audio-toggle" onClick={toggleAudio}>
+              <button
+                type="button"
+                className="audio-toggle"
+                onClick={toggleAudio}
+              >
                 <SpeakerLoudIcon /> {audio ? "소리 끄기" : "소리 켜기"}
+              </button>
+              <div className="player-control-spacer" />
+              <Select.Root value={quality} onValueChange={changeQuality}>
+                <Select.Trigger
+                  className="quality-select-trigger"
+                  aria-label="방송 화질 선택"
+                >
+                  <Select.Value />
+                  <Select.Icon>
+                    <ChevronDownIcon />
+                  </Select.Icon>
+                </Select.Trigger>
+                <Select.Portal>
+                  <Select.Content
+                    className="quality-select-content"
+                    position="popper"
+                    sideOffset={6}
+                  >
+                    <Select.Viewport>
+                      {[
+                        ["auto", "자동"],
+                        ["1080", "1080p"],
+                        ["720", "720p"],
+                        ["480", "480p"],
+                      ].map(([value, label]) => (
+                        <Select.Item
+                          className="quality-select-item"
+                          value={value}
+                          key={value}
+                        >
+                          <Select.ItemText>{label}</Select.ItemText>
+                        </Select.Item>
+                      ))}
+                    </Select.Viewport>
+                  </Select.Content>
+                </Select.Portal>
+              </Select.Root>
+              <button
+                type="button"
+                className="fullscreen-toggle"
+                onClick={() => void toggleFullscreen()}
+                aria-label={fullscreen ? "전체화면 종료" : "전체화면"}
+                title={fullscreen ? "전체화면 종료" : "전체화면"}
+              >
+                {fullscreen ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}
               </button>
             </div>
           </div>
@@ -211,11 +325,9 @@ export default function PartyRoom() {
             <TargetIcon />
             <div>
               <span>진행 중인 대표 미션</span>
-              <b>{missions[0]?.title}</b>
+              <b>{missions[0]?.title || "아직 등록된 미션이 없어요"}</b>
             </div>
-            <span>
-              <ClockIcon /> 18:42
-            </span>
+            {missions.length > 0 && <ClockIcon />}
           </div>
         </section>
         <aside className="sidebar">
@@ -241,6 +353,11 @@ export default function PartyRoom() {
                 </button>
               </form>
               <div className="mission-list">
+                {missions.length === 0 && (
+                  <p className="empty-missions">
+                    첫 번째 미션을 등록해 보세요.
+                  </p>
+                )}
                 {missions.map((m) => (
                   <article className="mission-card" key={m.id}>
                     <div>
@@ -299,6 +416,70 @@ export default function PartyRoom() {
           </Tabs.Root>
         </aside>
       </div>
-    </main>
+      </main>
+      <Dialog.Root open={roomAvailable === true && !nickname}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="party-dialog-overlay" />
+          <Dialog.Content
+            className="party-dialog nickname-dialog"
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            onPointerDownOutside={(e) => e.preventDefault()}
+          >
+            <Dialog.Title>파티에서 사용할 닉네임</Dialog.Title>
+            <Dialog.Description>
+              친구들에게 표시될 이름을 입력해 주세요.
+            </Dialog.Description>
+            <form onSubmit={confirmNickname}>
+              <label htmlFor="party-nickname">닉네임</label>
+              <input
+                id="party-nickname"
+                value={nicknameDraft}
+                onChange={(e) => setNicknameDraft(e.target.value)}
+                maxLength={12}
+                autoFocus
+                autoComplete="off"
+                placeholder="예: 민수"
+              />
+              <small>{nicknameDraft.length}/12</small>
+              <button type="submit" disabled={!nicknameDraft.trim()}>
+                파티 입장
+              </button>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <Dialog.Root open={roomAvailable === false}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="party-dialog-overlay" />
+          <Dialog.Content
+            className="party-dialog ended-room-dialog"
+            onEscapeKeyDown={(e) => e.preventDefault()}
+            onPointerDownOutside={(e) => e.preventDefault()}
+          >
+            <Dialog.Title>종료된 방송입니다.</Dialog.Title>
+            <Dialog.Description>
+              존재하지 않거나 호스트가 종료한 파티예요.
+            </Dialog.Description>
+            <Link href="/">메인으로 돌아가기</Link>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <Toast.Root
+        className="room-copy-toast"
+        open={copyToastOpen}
+        onOpenChange={setCopyToastOpen}
+      >
+        <CheckCircledIcon aria-hidden="true" />
+        <div>
+          <Toast.Title className="room-copy-toast-title">
+            복사되었습니다.
+          </Toast.Title>
+          <Toast.Description className="room-copy-toast-description">
+            방 코드를 친구에게 공유해 보세요.
+          </Toast.Description>
+        </div>
+      </Toast.Root>
+      <Toast.Viewport className="room-toast-viewport" />
+    </Toast.Provider>
   );
 }

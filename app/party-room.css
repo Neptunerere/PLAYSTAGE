@@ -23,6 +23,158 @@
   border-radius: 4px;
   padding: 4px 7px;
   font-size: 9px;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+.room-header-meta button:hover {
+  border-color: #4d7cff;
+  background: #293653;
+  color: #f4f7ff;
+}
+.room-header-meta button:focus-visible {
+  outline: 2px solid #6f94ff;
+  outline-offset: 2px;
+}
+.room-toast-viewport {
+  position: fixed;
+  z-index: 100;
+  bottom: 24px;
+  left: 50%;
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform: translateX(-50%);
+}
+.room-copy-toast {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 15px;
+  border: 1px solid #3b4553;
+  border-radius: 9px;
+  background: #1d2229;
+  color: #f5f7fb;
+  box-shadow: 0 12px 40px #0008;
+}
+.room-copy-toast > svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  color: #21d7cf;
+}
+.room-copy-toast [data-radix-toast-announce-exclude] {
+  margin: 0;
+}
+.room-copy-toast div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.room-copy-toast-title {
+  display: block !important;
+  margin: 0;
+  font-weight: 800;
+}
+.room-copy-toast-description {
+  display: block !important;
+  margin: 0;
+  color: #929cab;
+  font-size: 10px;
+}
+.nickname-dialog form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 22px;
+}
+.nickname-dialog form label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.nickname-dialog form input {
+  min-width: 0;
+  margin: 0;
+}
+.nickname-dialog form small {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: #747e8d;
+  font-size: 10px;
+}
+.nickname-dialog form button {
+  grid-column: 1 / -1;
+  border: 1px solid #363d48;
+  border-radius: 7px;
+  padding: 11px 14px;
+  background: #4d7cff;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+.nickname-dialog form button:disabled {
+  background: #292e36;
+  color: #737b88;
+  cursor: not-allowed;
+}
+.ended-room-dialog a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 22px;
+  border-radius: 7px;
+  padding: 11px 14px;
+  background: #4d7cff;
+  color: white;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.ended-room-dialog a:hover {
+  background: #638cff;
+}
+.room-copy-toast[data-state="open"] {
+  animation: room-toast-in 180ms ease-out;
+}
+.room-copy-toast[data-state="closed"] {
+  animation: room-toast-out 140ms ease-in;
+}
+.room-copy-toast[data-swipe="move"] {
+  transform: translateY(var(--radix-toast-swipe-move-y));
+}
+.room-copy-toast[data-swipe="cancel"] {
+  transform: translateY(0);
+  transition: transform 180ms ease-out;
+}
+.room-copy-toast[data-swipe="end"] {
+  animation: room-toast-swipe-out 120ms ease-out;
+}
+@keyframes room-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+@keyframes room-toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes room-toast-swipe-out {
+  to {
+    transform: translateY(calc(var(--radix-toast-swipe-end-y) + 24px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-copy-toast {
+    animation-duration: 1ms !important;
+  }
 }
 .party-pill {
   font-size: 8px;

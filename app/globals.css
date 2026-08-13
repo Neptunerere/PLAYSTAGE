@@ -48,7 +48,7 @@ body[data-scroll-locked] {
 .overlay-tools {
   position: absolute;
   left: 50%;
-  bottom: 14px;
+  bottom: 62px;
   transform: translateX(-50%);
   display: flex;
   gap: 5px;
@@ -58,6 +58,21 @@ body[data-scroll-locked] {
   padding: 6px;
   pointer-events: auto;
   box-shadow: 0 8px 25px #0007;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(8px);
+  transition:
+    opacity 180ms ease,
+    visibility 180ms ease,
+    transform 180ms ease;
+}
+.realtime-player:hover .overlay-tools,
+.realtime-player:focus-within .overlay-tools {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 .overlay-tools button {
   width: 32px;
@@ -1235,8 +1250,74 @@ body {
   opacity: 0;
   transition: 0.2s;
 }
-.player:hover .player-controls {
+.player:hover .player-controls,
+.player:focus-within .player-controls {
   opacity: 1;
+  pointer-events: auto;
+}
+.player-controls {
+  pointer-events: none;
+}
+.player-control-spacer {
+  flex: 1;
+}
+.quality-select-trigger,
+.fullscreen-toggle {
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: #11151ecc;
+  color: #f5f7fb;
+  cursor: pointer;
+}
+.quality-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.fullscreen-toggle {
+  width: 32px;
+  display: grid;
+  place-items: center;
+}
+.quality-select-trigger:hover,
+.fullscreen-toggle:hover {
+  background: #303846;
+}
+.quality-select-content {
+  z-index: 100;
+  min-width: 92px;
+  overflow: hidden;
+  border: 1px solid #3b4350;
+  border-radius: 8px;
+  padding: 4px;
+  background: #171b22;
+  color: #f5f7fb;
+  box-shadow: 0 10px 30px #0008;
+}
+.quality-select-item {
+  border-radius: 5px;
+  padding: 7px 9px;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+.quality-select-item[data-highlighted] {
+  background: #4d7cff;
+}
+@media (hover: none) {
+  .overlay-tools,
+  .player-controls {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .overlay-tools {
+    transform: translateX(-50%) translateY(0);
+  }
 }
 .player-controls svg {
   width: 20px;

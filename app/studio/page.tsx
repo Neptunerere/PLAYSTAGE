@@ -18,6 +18,7 @@ type Msg = {
   text?: string;
   answer?: RTCSessionDescriptionInit;
   item?: OverlayItem;
+  quality?: "auto" | "1080" | "720" | "480";
 };
 
 type Chat = { id: string; name: string; text: string };
@@ -144,6 +145,26 @@ export default function Studio() {
             ...current.slice(-99),
             { id: m.id!, name: m.name!, text: m.text! },
           ]);
+        else if (m.type === "quality-request" && m.quality) {
+          const track = s.getVideoTracks()[0];
+          const sizes = {
+            "1080": { width: 1920, height: 1080 },
+            "720": { width: 1280, height: 720 },
+            "480": { width: 854, height: 480 },
+          } as const;
+          const size = m.quality === "auto" ? null : sizes[m.quality];
+          await track
+            ?.applyConstraints(
+              size
+                ? {
+                    width: { ideal: size.width },
+                    height: { ideal: size.height },
+                    frameRate: { ideal: 30 },
+                  }
+                : { frameRate: { ideal: 30 } },
+            )
+            .catch(() => {});
+        }
       };
       ws.onclose = () => setLive(false);
       s.getVideoTracks()[0].onended = () => void stop();
