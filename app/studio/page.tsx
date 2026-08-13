@@ -65,6 +65,8 @@ export default function Studio() {
     socket = useRef<WebSocket | null>(null),
     roomCreated = useRef(false),
     stopping = useRef(false),
+    reconnectTimer = useRef<number | undefined>(undefined),
+    reconnectDelay = useRef(1000),
     peers = useRef(new Map<string, RTCPeerConnection>());
   const [room, setRoom] = useState(""),
     [roomTitle, setRoomTitle] = useState(""),
@@ -95,7 +97,66 @@ export default function Studio() {
       JSON.stringify({ type: "offer", target: id, offer: pc.localDescription }),
     );
   }
+  function connectBroadcaster(s: MediaStream) {
+    const ws = new WebSocket(
+      `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${process.env.NODE_ENV === "production" ? "/api/ws" : "/ws"}?room=${encodeURIComponent(room)}&role=broadcaster`,
+    );
+    socket.current = ws;
+    ws.onopen = () => {
+      reconnectDelay.current = 1000;
+      setLive(true);
+      ws.send(JSON.stringify({ type: "room-info", title: roomTitle.trim() }));
+    };
+    ws.onmessage = async (e) => {
+      const m = JSON.parse(e.data) as Msg;
+      if (m.type === "viewer-ready" && m.from) await offer(m.from, ws, s);
+      else if (m.type === "answer" && m.from && m.answer)
+        await peers.current.get(m.from)?.setRemoteDescription(m.answer);
+      else if (m.type === "overlay" && m.item)
+        setOverlay((v) =>
+          m.item!.kind === "clear"
+            ? []
+            : [...v.filter((x) => Date.now() - x.createdAt < 6000), m.item!],
+        );
+      else if (m.type === "chat" && m.id && m.name && m.text)
+        setMessages((current) => [
+          ...current.slice(-99),
+          { id: m.id!, name: m.name!, text: m.text! },
+        ]);
+      else if (m.type === "quality-request" && m.quality) {
+        const track = s.getVideoTracks()[0];
+        const sizes = {
+          "1080": { width: 1920, height: 1080 },
+          "720": { width: 1280, height: 720 },
+          "480": { width: 854, height: 480 },
+        } as const;
+        const size = m.quality === "auto" ? null : sizes[m.quality];
+        await track
+          ?.applyConstraints(
+            size
+              ? {
+                  width: { ideal: size.width },
+                  height: { ideal: size.height },
+                  frameRate: { ideal: 30 },
+                }
+              : { frameRate: { ideal: 30 } },
+          )
+          .catch(() => {});
+      }
+    };
+    ws.onclose = () => {
+      setLive(false);
+      if (stream.current === s && !stopping.current) {
+        reconnectTimer.current = window.setTimeout(
+          () => connectBroadcaster(s),
+          reconnectDelay.current,
+        );
+        reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30_000);
+      }
+    };
+  }
   async function start() {
+    stopping.current = false;
     setError("");
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({
@@ -121,52 +182,7 @@ export default function Studio() {
 
       stream.current = s;
       if (preview.current) preview.current.srcObject = s;
-      const ws = new WebSocket(
-        `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${encodeURIComponent(room)}&role=broadcaster`,
-      );
-      socket.current = ws;
-      ws.onopen = () => {
-        setLive(true);
-        ws.send(JSON.stringify({ type: "room-info", title: roomTitle.trim() }));
-      };
-      ws.onmessage = async (e) => {
-        const m = JSON.parse(e.data) as Msg;
-        if (m.type === "viewer-ready" && m.from) await offer(m.from, ws, s);
-        else if (m.type === "answer" && m.from && m.answer)
-          await peers.current.get(m.from)?.setRemoteDescription(m.answer);
-        else if (m.type === "overlay" && m.item)
-          setOverlay((v) =>
-            m.item!.kind === "clear"
-              ? []
-              : [...v.filter((x) => Date.now() - x.createdAt < 6000), m.item!],
-          );
-        else if (m.type === "chat" && m.id && m.name && m.text)
-          setMessages((current) => [
-            ...current.slice(-99),
-            { id: m.id!, name: m.name!, text: m.text! },
-          ]);
-        else if (m.type === "quality-request" && m.quality) {
-          const track = s.getVideoTracks()[0];
-          const sizes = {
-            "1080": { width: 1920, height: 1080 },
-            "720": { width: 1280, height: 720 },
-            "480": { width: 854, height: 480 },
-          } as const;
-          const size = m.quality === "auto" ? null : sizes[m.quality];
-          await track
-            ?.applyConstraints(
-              size
-                ? {
-                    width: { ideal: size.width },
-                    height: { ideal: size.height },
-                    frameRate: { ideal: 30 },
-                  }
-                : { frameRate: { ideal: 30 } },
-            )
-            .catch(() => {});
-        }
-      };
-      ws.onclose = () => setLive(false);
+      connectBroadcaster(s);
       s.getVideoTracks()[0].onended = () => void stop();
     } catch (e) {
       setError(
@@ -175,6 +191,8 @@ export default function Studio() {
     }
   }
   function cleanupResources(updateState = true) {
+    stopping.current = true;
+    window.clearTimeout(reconnectTimer.current);
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
     socket.current?.close();

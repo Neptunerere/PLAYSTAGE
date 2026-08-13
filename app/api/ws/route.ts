@@ -1,0 +1,19 @@
+import { experimental_upgradeWebSocket } from "@vercel/functions";
+import { registerRealtimeClient } from "@/lib/realtime";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
+export function GET(request: Request) {
+  const url = new URL(request.url);
+  const room =
+    (url.searchParams.get("room") || "main")
+      .replace(/[^a-zA-Z0-9-]/g, "")
+      .slice(0, 20) || "main";
+  const role =
+    url.searchParams.get("role") === "broadcaster" ? "broadcaster" : "viewer";
+
+  return experimental_upgradeWebSocket((socket) => {
+    registerRealtimeClient(socket, room, role);
+  });
+}
