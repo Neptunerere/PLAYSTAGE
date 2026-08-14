@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import type { WebSocket } from "ws";
 import { redis } from "./redis";
+import {
+  postMissionToDiscord,
+  updateDiscordMissionMessage,
+} from "./discord-bot";
 
 type Client = { id: string; role: "broadcaster" | "viewer"; socket: WebSocket };
 type Payload = Record<string, unknown> & { type: string; target?: string };
@@ -16,6 +20,11 @@ const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 
 const channel = (room: string) => `playstage:room:${room}`;
 const hostKey = (room: string) => `playstage:host:${room}`;
+const appOrigin =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
 
 function localBroadcast(room: string, payload: Payload) {
   for (const id of roomClients.get(room) ?? []) {
@@ -168,7 +177,12 @@ async function handleMessage(
        returning id, title, creator, status, success, fail`,
       [room, title, String(message.name || "친구").slice(0, 24)],
     );
-    if (mission) await publish(room, { type: "mission", mission });
+    if (mission) {
+      await publish(room, { type: "mission", mission });
+      void postMissionToDiscord(room, String(mission.id), appOrigin).catch(
+        (error) => console.error("Failed to post Discord mission", error),
+      );
+    }
     return;
   }
   if (type === "mission-vote" && sql) {
@@ -185,7 +199,12 @@ async function handleMessage(
        returning m.id, m.title, m.creator, m.status, m.success, m.fail`,
       [room, String(message.missionId)],
     );
-    if (mission) await publish(room, { type: "mission-updated", mission });
+    if (mission) {
+      await publish(room, { type: "mission-updated", mission });
+      void updateDiscordMissionMessage(String(mission.id), appOrigin).catch(
+        (error) => console.error("Failed to update Discord mission", error),
+      );
+    }
     return;
   }
   if (type === "quality-request" && role === "viewer") {

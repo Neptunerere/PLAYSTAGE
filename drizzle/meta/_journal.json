@@ -15,6 +15,13 @@
       "when": 1786629857159,
       "tag": "0001_nervous_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786690771930,
+      "tag": "0002_smooth_clea",
+      "breakpoints": true
     }
   ]
 }

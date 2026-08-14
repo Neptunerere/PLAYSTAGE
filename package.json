@@ -11,7 +11,8 @@
     "format:check": "prettier --check \"app/**/*.{ts,tsx,css}\" \"*.{js,mjs,json}\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "discord:register": "node scripts/register-discord-commands.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

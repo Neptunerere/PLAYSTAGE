@@ -23,6 +23,88 @@ const roomTitles = new Map();
 const hostDisconnectTimers = new Map();
 const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 const HOST_RECONNECT_GRACE_MS = 8_000;
+const appOrigin = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
+
+function discordMissionPayload(mission) {
+  const finished = mission.status !== "active";
+  return {
+    embeds: [
+      {
+        title: `🎯 ${mission.title}`,
+        description: `${mission.status === "success" ? "✅ 성공 확정" : mission.status === "fail" ? "❌ 실패 확정" : "투표 진행 중"}\n제안자 **${mission.creator}** · 성공 시 **${mission.reward || 100}P**`,
+        color: mission.status === "success" ? 0x21d79f : mission.status === "fail" ? 0xff4967 : 0x5865f2,
+        fields: [
+          { name: "✅ 성공", value: `${mission.success}표`, inline: true },
+          { name: "❌ 실패", value: `${mission.fail}표`, inline: true },
+        ],
+        footer: { text: "3표를 먼저 얻은 결과로 확정됩니다 · 투표 참여 +5P" },
+      },
+    ],
+    components: [
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 3, label: "성공", custom_id: `mission_vote:success:${mission.id}`, disabled: finished },
+          { type: 2, style: 4, label: "실패", custom_id: `mission_vote:fail:${mission.id}`, disabled: finished },
+          { type: 2, style: 5, label: "웹에서 보기", url: `${appOrigin}/live?room=${mission.roomCode}` },
+        ],
+      },
+    ],
+  };
+}
+
+async function postMissionToDiscord(roomCode, missionId) {
+  if (!sql || !process.env.DISCORD_BOT_TOKEN) return;
+  const [mission] = await sql.query(
+    `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            r.code as "roomCode", rd.channel_id as "channelId"
+       from missions m join rooms r on r.id = m.room_id
+       join room_discord rd on rd.room_id = r.id
+      where r.code = $1 and m.id = $2`,
+    [roomCode, missionId],
+  );
+  if (!mission) return;
+  const response = await fetch(
+    `https://discord.com/api/v10/channels/${mission.channelId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(discordMissionPayload(mission)),
+    },
+  );
+  if (!response.ok) return;
+  const message = await response.json();
+  await sql.query(
+    `update missions set discord_message_id = $2, discord_channel_id = $3 where id = $1`,
+    [missionId, message.id, message.channel_id],
+  );
+}
+
+async function updateDiscordMission(missionId) {
+  if (!sql || !process.env.DISCORD_BOT_TOKEN) return;
+  const [mission] = await sql.query(
+    `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            m.discord_message_id as "messageId", m.discord_channel_id as "channelId",
+            r.code as "roomCode" from missions m join rooms r on r.id = m.room_id
+      where m.id = $1`,
+    [missionId],
+  );
+  if (!mission?.messageId || !mission?.channelId) return;
+  await fetch(
+    `https://discord.com/api/v10/channels/${mission.channelId}/messages/${mission.messageId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(discordMissionPayload(mission)),
+    },
+  );
+}
 
 async function deleteRoomRecord(roomCode) {
   if (!sql) return;
@@ -193,7 +275,12 @@ wss.on("connection", (socket, request, clientInfo) => {
            returning id, title, creator, status, success, fail`,
           [roomId, title, creator],
         );
-        if (mission) broadcast(roomId, { type: "mission", mission });
+        if (mission) {
+          broadcast(roomId, { type: "mission", mission });
+          void postMissionToDiscord(roomId, mission.id).catch((error) =>
+            console.error("Failed to post Discord mission", error),
+          );
+        }
       } catch (error) {
         console.error("Failed to create mission", error);
         send(socket, { type: "mission-error" });
@@ -230,7 +317,12 @@ wss.on("connection", (socket, request, clientInfo) => {
            returning m.id, m.title, m.creator, m.status, m.success, m.fail`,
           [roomId, String(message.missionId)],
         );
-        if (mission) broadcast(roomId, { type: "mission-updated", mission });
+        if (mission) {
+          broadcast(roomId, { type: "mission-updated", mission });
+          void updateDiscordMission(mission.id).catch((error) =>
+            console.error("Failed to update Discord mission", error),
+          );
+        }
       } catch (error) {
         console.error("Failed to vote mission", error);
         send(socket, { type: "mission-error" });

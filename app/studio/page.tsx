@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { DesktopIcon, StopIcon } from "@radix-ui/react-icons";
+import { DesktopIcon, DiscordLogoIcon, StopIcon } from "@radix-ui/react-icons";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -234,6 +234,7 @@ export default function Studio() {
 
     stopping.current = false;
   }
+
   return (
     <main className="studio-page">
       <header>
@@ -243,13 +244,31 @@ export default function Studio() {
             PLAY<span>STAGE</span>
           </span>
         </Link>
-        <Link href={`/live?room=${encodeURIComponent(room)}`}>
-          시청 화면 열기 →
-        </Link>
+        <div className="studio-header-links">
+          <a className="discord-install-link" href="/api/discord/install">
+            <DiscordLogoIcon /> Discord 봇 설치
+          </a>
+          <Link href={`/live?room=${encodeURIComponent(room)}`}>
+            시청 화면 열기 →
+          </Link>
+        </div>
       </header>
       <div className="studio-shell">
         <section>
           <div className="studio-heading">
+            <div className="discord-bot-guide">
+              <div className="discord-channel-icon">
+                <DiscordLogoIcon />
+              </div>
+              <div>
+                <b>Discord 채널과 함께 쓰기</b>
+                <p>
+                  봇을 설치하고 채널에서 /party를 실행하면 미션·투표·포인트가
+                  실시간으로 연결돼요.
+                </p>
+              </div>
+              <a href="/api/discord/install">봇 설치</a>
+            </div>
             <div className="studio-heading-copy">
               <span>방송 설정</span>
               <p>친구에게 보여줄 방송 정보를 입력하세요.</p>

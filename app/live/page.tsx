@@ -5,6 +5,7 @@ import {
   CheckCircledIcon,
   ChevronDownIcon,
   ClockIcon,
+  DiscordLogoIcon,
   EnterFullScreenIcon,
   ExitFullScreenIcon,
   PaperPlaneIcon,
@@ -78,6 +79,18 @@ export default function PartyRoom() {
     document.addEventListener("fullscreenchange", updateFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
+  useEffect(() => {
+    fetch("/api/auth/discord/me", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((result: { user?: { displayName?: string } | null }) => {
+        const displayName = result.user?.displayName?.trim().slice(0, 12);
+        if (displayName) {
+          setNicknameDraft(displayName);
+          setNickname(displayName);
+        }
+      })
+      .catch(() => {});
   }, []);
   useEffect(() => {
     let cancelled = false;
@@ -447,6 +460,15 @@ export default function PartyRoom() {
             <Dialog.Description>
               친구들에게 표시될 이름을 입력해 주세요.
             </Dialog.Description>
+            <a
+              className="discord-nickname-button"
+              href={`/api/auth/discord?returnTo=${encodeURIComponent(`/live?room=${room}`)}`}
+            >
+              <DiscordLogoIcon /> Discord 닉네임으로 입장
+            </a>
+            <div className="nickname-divider">
+              <span>또는</span>
+            </div>
             <form onSubmit={confirmNickname}>
               <label htmlFor="party-nickname">닉네임</label>
               <input
