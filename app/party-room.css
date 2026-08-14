@@ -432,6 +432,188 @@
 .party-room .sidebar {
   min-height: 640px;
 }
+
+@media (min-width: 901px) {
+  .party-room .topbar {
+    height: 70px;
+    min-height: 70px;
+    padding-right: max(32px, env(safe-area-inset-right));
+    padding-left: max(32px, env(safe-area-inset-left));
+  }
+
+  .party-room .brand {
+    gap: 11px;
+    font-size: 22px;
+  }
+
+  .party-room .brand-mark {
+    width: 27px;
+    height: 27px;
+    flex-basis: 27px;
+  }
+
+  .party-room .room-header-meta,
+  .party-room .profile {
+    font-size: 14px;
+  }
+
+  .room-header-meta button {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .party-room .layout {
+    width: min(1560px, calc(100% - 56px));
+    margin: 36px auto;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 26px;
+  }
+
+  .party-room .player {
+    border-radius: 14px;
+  }
+
+  .party-room .live-badge,
+  .party-room .stream-status {
+    top: 22px;
+    left: 22px;
+    padding: 9px 11px;
+    font-size: 14px;
+  }
+
+  .party-room .player-controls {
+    padding: 42px 22px 19px;
+    gap: 12px;
+  }
+
+  .party-room .player-controls button,
+  .party-room .quality-select-trigger {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .party-room .fullscreen-toggle {
+    width: 40px;
+  }
+
+  .party-room .stream-title {
+    padding: 24px 0 21px;
+  }
+
+  .party-room .stream-title h1 {
+    font-size: 27px;
+  }
+
+  .party-room .stream-title p {
+    margin-top: 10px;
+    font-size: 15px;
+  }
+
+  .party-pill {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+
+  .active-mission-strip {
+    min-height: 90px;
+    margin: 6px 0 18px;
+    padding: 18px 21px;
+    gap: 15px;
+    border-radius: 11px;
+  }
+
+  .active-mission-strip > svg {
+    width: 29px;
+    height: 29px;
+  }
+
+  .active-mission-strip > div span {
+    font-size: 12px;
+  }
+
+  .active-mission-strip > div b {
+    font-size: 17px;
+  }
+
+  .party-room .sidebar,
+  .party-tabs {
+    min-height: 720px;
+  }
+
+  .party-tabs {
+    border-radius: 14px;
+  }
+
+  .party-tab-list button {
+    height: 64px;
+    font-size: 14px;
+  }
+
+  .party-tab-list button span {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
+  .mission-form {
+    gap: 8px;
+    padding: 15px;
+  }
+
+  .mission-form input,
+  .chat-tab form input {
+    min-height: 44px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .mission-form button {
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .mission-list {
+    padding: 15px;
+    gap: 12px;
+    max-height: 635px;
+  }
+
+  .mission-card {
+    padding: 16px;
+  }
+
+  .mission-card h3 {
+    font-size: 16px;
+  }
+
+  .mission-card small,
+  .mission-card > div:first-child span,
+  .mission-timer,
+  .vote-buttons button {
+    font-size: 12px;
+  }
+
+  .vote-buttons button {
+    min-height: 40px;
+  }
+
+  .chat-tab {
+    height: 663px;
+  }
+
+  .chat-tab .messages p,
+  .chat-tab .messages b {
+    font-size: 14px;
+  }
+
+  .chat-tab form {
+    padding: 13px;
+  }
+
+  .chat-tab form button {
+    width: 42px;
+  }
+}
 @media (max-width: 900px) {
   .party-tabs {
     min-height: 520px;
