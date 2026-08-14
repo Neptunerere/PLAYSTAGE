@@ -143,7 +143,7 @@ async function createParty(
       [channelId, guildId, interaction.channel?.name || null],
     );
     const [room] = await sql.query(
-      `insert into rooms (title, code) values ($1, $2) returning id`,
+      `insert into rooms (title, code, created_via) values ($1, $2, 'discord') returning id`,
       [title, roomCode],
     );
     await sql.query(
@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
         [channelId, guildId, interaction.channel?.name || null],
       );
       const [room] = await sql.query(
-        `insert into rooms (title, code) values ($1, $2) returning id`,
+        `insert into rooms (title, code, created_via) values ($1, $2, 'discord') returning id`,
         [title, roomCode],
       );
       await sql.query(

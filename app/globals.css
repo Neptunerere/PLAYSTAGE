@@ -837,6 +837,12 @@ body[data-scroll-locked] {
   border-radius: 7px;
   outline: none;
 }
+.studio-controls input:read-only {
+  border-color: #303641;
+  background: #171a20;
+  color: #b9c1cd;
+  cursor: default;
+}
 .studio-controls button {
   border: 0;
   border-radius: 7px;

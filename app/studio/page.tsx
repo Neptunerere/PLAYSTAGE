@@ -121,6 +121,7 @@ export default function Studio() {
   const [discordGateDismissed, setDiscordGateDismissed] = useState(false);
   const [roomInitialized, setRoomInitialized] = useState(false);
   const [showDiscordLoading, setShowDiscordLoading] = useState(false);
+  const [discordCreatedRoom, setDiscordCreatedRoom] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,11 +135,16 @@ export default function Studio() {
           });
           if (!response.ok) throw new Error("존재하지 않거나 종료된 파티입니다.");
           const result = (await response.json()) as {
-            room?: { code?: string; title?: string };
+            room?: { code?: string; title?: string; createdVia?: string };
           };
           if (!cancelled) {
             setRoom(result.room?.code || requested);
-            if (result.room?.title && result.room.title !== "새 게임 파티")
+            const fromDiscord = result.room?.createdVia === "discord";
+            setDiscordCreatedRoom(fromDiscord);
+            if (
+              result.room?.title &&
+              (fromDiscord || result.room.title !== "새 게임 파티")
+            )
               setRoomTitle(result.room.title);
           }
         } else {
@@ -561,7 +567,7 @@ export default function Studio() {
                   <div className="studio-controls">
                     <label>
                       방 제목
-                      <input autoFocus value={roomTitle} onChange={(event) => setRoomTitle(event.target.value.slice(0, 50))} placeholder="예: 금요일 저녁 게임 파티" maxLength={50} />
+                      <input autoFocus={!discordCreatedRoom} value={roomTitle} onChange={(event) => setRoomTitle(event.target.value.slice(0, 50))} placeholder="예: 금요일 저녁 게임 파티" maxLength={50} readOnly={discordCreatedRoom} aria-readonly={discordCreatedRoom} />
                     </label>
                     <label>
                       방 코드
