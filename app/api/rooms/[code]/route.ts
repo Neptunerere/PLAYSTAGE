@@ -17,7 +17,7 @@ export async function GET(
     }
 
     const room = await getDb().query.rooms.findFirst({
-      columns: { id: true, title: true, code: true },
+      columns: { id: true, title: true, code: true, status: true },
       where: eq(rooms.code, code),
     });
 

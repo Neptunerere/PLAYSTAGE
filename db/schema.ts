@@ -16,6 +16,7 @@ export const rooms = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     title: varchar("title", { length: 50 }).notNull(),
     code: varchar("code", { length: 20 }).notNull(),
+    status: varchar("status", { length: 20 }).default("draft").notNull(),
   },
   (table) => [uniqueIndex("rooms_code_unique").on(table.code)],
 );
