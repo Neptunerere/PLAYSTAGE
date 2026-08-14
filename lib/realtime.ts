@@ -147,6 +147,24 @@ async function handleMessage(
     if (title) await publish(room, { type, title });
     return;
   }
+  if (type === "missions-request" && role === "broadcaster") {
+    socket.send(
+      JSON.stringify({ type: "missions-sync", missions: await getRoomMissions(room) }),
+    );
+    return;
+  }
+  if (type === "viewer-profile" && role === "viewer") {
+    const name = String(message.name || "친구").trim().slice(0, 24);
+    await publish(room, { type, from: id, name });
+    return;
+  }
+  if (
+    role === "broadcaster" &&
+    ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(type)
+  ) {
+    await publish(room, { type, from: id });
+    return;
+  }
   if (type === "viewer-ready") {
     socket.send(
       JSON.stringify({

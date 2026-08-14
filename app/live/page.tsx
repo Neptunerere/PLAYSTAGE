@@ -142,6 +142,10 @@ export default function PartyRoom() {
         reconnectDelay = 1000;
         setConnected(true);
         currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+        if (nickname)
+          currentWs.send(
+            JSON.stringify({ type: "viewer-profile", name: nickname }),
+          );
       };
       currentWs.onclose = () => {
         setConnected(false);
@@ -199,9 +203,15 @@ export default function PartyRoom() {
               ? []
               : [...v.filter((x) => Date.now() - x.createdAt < 6000), m.item!],
           );
-        else if (m.type === "broadcast-started") {
+        else if (
+          m.type === "broadcast-started" ||
+          m.type === "screen-changed" ||
+          m.type === "broadcast-resumed"
+        ) {
           setStatus("호스트의 화면을 다시 연결하는 중");
           currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+        } else if (m.type === "broadcast-paused") {
+          setStatus("호스트가 화면 공유를 잠시 멈췄어요");
         } else if (m.type === "broadcast-reconnecting")
           setStatus("호스트의 재접속을 기다리는 중");
         else if (m.type === "room-closed") {
@@ -220,6 +230,12 @@ export default function PartyRoom() {
       peer.current?.close();
     };
   }, []);
+  useEffect(() => {
+    if (!nickname || socket.current?.readyState !== WebSocket.OPEN) return;
+    socket.current.send(
+      JSON.stringify({ type: "viewer-profile", name: nickname }),
+    );
+  }, [nickname]);
   const send = (v: object) =>
     socket.current?.readyState === WebSocket.OPEN &&
     socket.current.send(JSON.stringify(v));

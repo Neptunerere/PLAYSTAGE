@@ -229,6 +229,29 @@ wss.on("connection", (socket, request, clientInfo) => {
       return;
     }
 
+    if (message.type === "missions-request" && role === "broadcaster") {
+      try {
+        send(socket, { type: "missions-sync", missions: await getRoomMissions(roomId) });
+      } catch (error) {
+        console.error("Failed to load host missions", error);
+      }
+      return;
+    }
+
+    if (message.type === "viewer-profile" && role === "viewer") {
+      const name = String(message.name || "친구").trim().slice(0, 24);
+      broadcast(roomId, { type: "viewer-profile", from: id, name });
+      return;
+    }
+
+    if (
+      role === "broadcaster" &&
+      ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(message.type)
+    ) {
+      broadcast(roomId, { type: message.type, from: id }, id);
+      return;
+    }
+
     if (message.type === "viewer-ready") {
       try {
         const missions = await getRoomMissions(roomId);
