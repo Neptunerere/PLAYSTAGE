@@ -21,11 +21,7 @@ import {
   UpdateIcon,
 } from "@radix-ui/react-icons";
 import { Tabs, Toast } from "radix-ui";
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import PartyOverlay, { OverlayItem } from "../components/party-overlay";
 
 type Mission = {
@@ -120,7 +116,7 @@ export default function Studio() {
   const [discordChannelName, setDiscordChannelName] = useState("");
   const [discordGateDismissed, setDiscordGateDismissed] = useState(false);
   const [roomInitialized, setRoomInitialized] = useState(false);
-  const [showDiscordLoading, setShowDiscordLoading] = useState(false);
+  const [showDiscordLoading, setShowDiscordLoading] = useState(true);
   const [discordCreatedRoom, setDiscordCreatedRoom] = useState(false);
 
   useEffect(() => {
@@ -130,10 +126,14 @@ export default function Studio() {
       const requested = raw?.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20);
       try {
         if (requested) {
-          const response = await fetch(`/api/rooms/${encodeURIComponent(requested)}`, {
-            cache: "no-store",
-          });
-          if (!response.ok) throw new Error("존재하지 않거나 종료된 파티입니다.");
+          const response = await fetch(
+            `/api/rooms/${encodeURIComponent(requested)}`,
+            {
+              cache: "no-store",
+            },
+          );
+          if (!response.ok)
+            throw new Error("존재하지 않거나 종료된 파티입니다.");
           const result = (await response.json()) as {
             room?: { code?: string; title?: string; createdVia?: string };
           };
@@ -154,14 +154,17 @@ export default function Studio() {
       } catch (caught) {
         if (!cancelled)
           setError(
-            caught instanceof Error ? caught.message : "파티를 준비하지 못했습니다.",
+            caught instanceof Error
+              ? caught.message
+              : "파티를 준비하지 못했습니다.",
           );
       } finally {
         if (!cancelled) setRoomInitialized(true);
       }
     };
     void initializeRoom();
-    const onFullscreen = () => setFullscreen(document.fullscreenElement === previewShell.current);
+    const onFullscreen = () =>
+      setFullscreen(document.fullscreenElement === previewShell.current);
     document.addEventListener("fullscreenchange", onFullscreen);
     return () => {
       cancelled = true;
@@ -201,20 +204,18 @@ export default function Studio() {
           : "Discord 채널 연결을 확인했습니다.",
       );
     else if (!connected && announce)
-      setNotice("아직 연결되지 않았어요. Discord 채널에서 /연결 명령을 실행해 주세요.");
+      setNotice(
+        "아직 연결되지 않았어요. Discord 채널에서 /연결 명령을 실행해 주세요.",
+      );
     return connected;
   }
 
   useEffect(() => {
     if (!room) return;
     setDiscordChecking(true);
-    setShowDiscordLoading(false);
-    discordLoadingShownAt.current = null;
+    setShowDiscordLoading(true);
+    discordLoadingShownAt.current = Date.now();
     window.clearTimeout(discordLoadingTimer.current);
-    discordLoadingTimer.current = window.setTimeout(() => {
-      discordLoadingShownAt.current = Date.now();
-      setShowDiscordLoading(true);
-    }, 400);
     void checkDiscordConnection(room);
     const timer = window.setInterval(() => {
       if (!discordConnected && !discordGateDismissed)
@@ -233,8 +234,9 @@ export default function Studio() {
 
   function syncViewerCount() {
     setViewers(
-      [...peers.current.values()].filter((peer) => peer.connectionState === "connected")
-        .length,
+      [...peers.current.values()].filter(
+        (peer) => peer.connectionState === "connected",
+      ).length,
     );
   }
 
@@ -246,7 +248,9 @@ export default function Studio() {
     pc.onconnectionstatechange = syncViewerCount;
     await pc.setLocalDescription(await pc.createOffer());
     await iceDone(pc);
-    ws.send(JSON.stringify({ type: "offer", target: id, offer: pc.localDescription }));
+    ws.send(
+      JSON.stringify({ type: "offer", target: id, offer: pc.localDescription }),
+    );
   }
 
   function connectBroadcaster(source: MediaStream) {
@@ -270,9 +274,20 @@ export default function Studio() {
           [message.from!]: current[message.from!] || "친구",
         }));
         await offer(message.from, ws, source);
-      } else if (message.type === "viewer-profile" && message.from && message.name) {
-        setParticipants((current) => ({ ...current, [message.from!]: message.name! }));
-      } else if (message.type === "peer-left" && message.from && message.role === "viewer") {
+      } else if (
+        message.type === "viewer-profile" &&
+        message.from &&
+        message.name
+      ) {
+        setParticipants((current) => ({
+          ...current,
+          [message.from!]: message.name!,
+        }));
+      } else if (
+        message.type === "peer-left" &&
+        message.from &&
+        message.role === "viewer"
+      ) {
         peers.current.get(message.from)?.close();
         peers.current.delete(message.from);
         setParticipants((current) => {
@@ -282,14 +297,24 @@ export default function Studio() {
         });
         syncViewerCount();
       } else if (message.type === "answer" && message.from && message.answer) {
-        await peers.current.get(message.from)?.setRemoteDescription(message.answer);
+        await peers.current
+          .get(message.from)
+          ?.setRemoteDescription(message.answer);
       } else if (message.type === "overlay" && message.item) {
         setOverlay((current) =>
           message.item!.kind === "clear"
             ? []
-            : [...current.filter((item) => Date.now() - item.createdAt < 6000), message.item!],
+            : [
+                ...current.filter((item) => Date.now() - item.createdAt < 6000),
+                message.item!,
+              ],
         );
-      } else if (message.type === "chat" && message.id && message.name && message.text) {
+      } else if (
+        message.type === "chat" &&
+        message.id &&
+        message.name &&
+        message.text
+      ) {
         setMessages((current) => [
           ...current.slice(-99),
           { id: message.id!, name: message.name!, text: message.text! },
@@ -315,7 +340,11 @@ export default function Studio() {
         await track
           ?.applyConstraints(
             size
-              ? { width: { ideal: size.width }, height: { ideal: size.height }, frameRate: { ideal: 30 } }
+              ? {
+                  width: { ideal: size.width },
+                  height: { ideal: size.height },
+                  frameRate: { ideal: 30 },
+                }
               : { frameRate: { ideal: 30 } },
           )
           .catch(() => {});
@@ -362,7 +391,9 @@ export default function Studio() {
       });
       if (!response.ok) {
         source.getTracks().forEach((track) => track.stop());
-        const result = (await response.json().catch(() => null)) as { error?: string } | null;
+        const result = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(result?.error || "방 정보를 저장하지 못했습니다.");
       }
       roomCreated.current = true;
@@ -375,7 +406,11 @@ export default function Studio() {
       bindStream(source);
       connectBroadcaster(source);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "화면 공유를 시작하지 못했습니다.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "화면 공유를 시작하지 못했습니다.",
+      );
     }
   }
 
@@ -393,14 +428,17 @@ export default function Studio() {
       send({ type: "screen-changed" });
       setNotice("공유 화면을 전환했습니다.");
     } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "NotAllowedError") return;
+      if (caught instanceof DOMException && caught.name === "NotAllowedError")
+        return;
       setError("화면을 전환하지 못했습니다.");
     }
   }
 
   function togglePause() {
     const next = !paused;
-    stream.current?.getVideoTracks().forEach((track) => (track.enabled = !next));
+    stream.current
+      ?.getVideoTracks()
+      .forEach((track) => (track.enabled = !next));
     setPaused(next);
     send({ type: next ? "broadcast-paused" : "broadcast-resumed" });
   }
@@ -432,11 +470,20 @@ export default function Studio() {
   }
 
   async function notifyDiscord() {
-    const response = await fetch(`/api/rooms/${encodeURIComponent(room)}/discord`, {
-      method: "POST",
-    });
-    const result = (await response.json().catch(() => null)) as { error?: string } | null;
-    setNotice(response.ok ? "Discord 채널에 방송 알림을 보냈습니다." : result?.error || "알림을 보내지 못했습니다.");
+    const response = await fetch(
+      `/api/rooms/${encodeURIComponent(room)}/discord`,
+      {
+        method: "POST",
+      },
+    );
+    const result = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    setNotice(
+      response.ok
+        ? "Discord 채널에 방송 알림을 보냈습니다."
+        : result?.error || "알림을 보내지 못했습니다.",
+    );
   }
 
   function cleanupResources(updateState = true) {
@@ -468,20 +515,28 @@ export default function Studio() {
     cleanupResources();
     if (roomCreated.current) {
       try {
-        const response = await fetch(`/api/rooms/${encodeURIComponent(room)}`, { method: "DELETE" });
+        const response = await fetch(`/api/rooms/${encodeURIComponent(room)}`, {
+          method: "DELETE",
+        });
         if (!response.ok && response.status !== 404)
           throw new Error("방 정보를 삭제하지 못했습니다.");
         roomCreated.current = false;
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "방 정보를 삭제하지 못했습니다.");
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "방 정보를 삭제하지 못했습니다.",
+        );
       }
     }
     stopping.current = false;
   }
 
-  const activeMission = missions.find((mission) => mission.status === "active") || missions[0];
+  const activeMission =
+    missions.find((mission) => mission.status === "active") || missions[0];
   const settingsDisabled = live || Boolean(stream.current);
-  const inviteUrl = typeof window === "undefined" ? "" : `${location.origin}/live?room=${room}`;
+  const inviteUrl =
+    typeof window === "undefined" ? "" : `${location.origin}/live?room=${room}`;
   const videoTrack = stream.current?.getVideoTracks()[0];
   const settings = videoTrack?.getSettings();
   const showDiscordGate =
@@ -494,163 +549,425 @@ export default function Studio() {
 
   return (
     <Toast.Provider swipeDirection="down" duration={2600}>
-      <main className={`studio-page ${settingsDisabled ? "is-live" : "is-setup"}`}>
+      <main
+        className={`studio-page ${settingsDisabled ? "is-live" : "is-setup"}`}
+      >
         <header>
           <Link className="brand" href="/">
             <img className="brand-mark" src="/icon.png" alt="" />
-            <span>PLAY<span>STAGE</span></span>
+            <span>
+              PLAY<span>STAGE</span>
+            </span>
           </Link>
           <div className="studio-header-links">
-            <button type="button" onClick={() => void copy(inviteUrl, "시청 링크를 복사했습니다.")} disabled={!room}>
+            <button
+              type="button"
+              onClick={() => void copy(inviteUrl, "시청 링크를 복사했습니다.")}
+              disabled={!room}
+            >
               <Link2Icon /> 시청 링크 복사
             </button>
-            <Link href={`/live?room=${encodeURIComponent(room)}`}>시청 화면 열기 →</Link>
+            <Link href={`/live?room=${encodeURIComponent(room)}`}>
+              시청 화면 열기 →
+            </Link>
           </div>
         </header>
 
         {holdStudioForDiscord ? (
-          <section className={`discord-connect-gate ${(!roomInitialized || discordChecking) && !showDiscordLoading ? "is-silent" : ""}`}>
+          <section
+            className={`discord-connect-gate ${(!roomInitialized || discordChecking) && !showDiscordLoading ? "is-silent" : ""} ${showDiscordLoading ? "is-loading" : ""}`}
+          >
             {!roomInitialized || discordChecking ? (
-              showDiscordLoading ? <div className="discord-connect-loading" role="status" aria-live="polite">
-                <span><DiscordLogoIcon /></span>
-                <b>파티 연결 상태를 확인하고 있어요</b>
-                <p>잠시만 기다려 주세요.</p>
-              </div> : <div className="discord-connect-placeholder" aria-hidden="true" />
+              showDiscordLoading ? (
+                <div
+                  className="discord-connect-loading"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span>
+                    <DiscordLogoIcon />
+                  </span>
+                  <b>파티 연결 상태를 확인하고 있어요</b>
+                  <p>잠시만 기다려 주세요.</p>
+                </div>
+              ) : (
+                <div
+                  className="discord-connect-placeholder"
+                  aria-hidden="true"
+                />
+              )
             ) : (
-            <>
-            <div className="discord-connect-hero">
-              <span className="discord-connect-icon"><DiscordLogoIcon /></span>
-              <span>DISCORD PARTY</span>
-            </div>
-            <h1>친구들이 있는 Discord와<br />파티를 먼저 연결해 보세요</h1>
-            <p>
-              미션 제안과 성공·실패 투표가 Discord에도 실시간으로 전달돼요.<br />
-              이미 봇을 설치하고 방을 연결했다면 바로 확인할 수 있습니다.
-            </p>
-            <div className="discord-connect-code">
-              <span>현재 방 코드</span>
-              <b>{room}</b>
-              <button type="button" onClick={() => void copy(room, "방 코드를 복사했습니다.")}><CopyIcon /> 복사</button>
-            </div>
-            <div className="discord-connect-steps">
-              <article><span>01</span><div><b>봇 설치</b><p>친구들이 모인 Discord 서버에 PLAYSTAGE 봇을 추가해요.</p></div></article>
-              <article><span>02</span><div><b>/연결 실행</b><p>원하는 채널에서 <code>/연결</code> 후 위 방 코드를 입력해요.</p></div></article>
-              <article><span>03</span><div><b>연결 확인</b><p>확인되면 방송 설정 화면으로 자동 이동해요.</p></div></article>
-            </div>
-            <div className="discord-auto-check"><CheckCircledIcon /><span><b>연결 대기 중</b> Discord 채널 연결 여부를 자동으로 확인하고 있어요.</span></div>
-            <div className="discord-connect-actions">
-              <a href="/api/discord/install" target="_blank" rel="noreferrer"><DiscordLogoIcon /> Discord 봇 설치하기</a>
-              <button type="button" className="skip" onClick={() => setDiscordGateDismissed(true)}>Discord 없이 방송하기</button>
-            </div>
-            <small>이미 봇이 설치되어 있다면 Discord 채널에서 <code>/연결</code>만 실행해 주세요.</small>
-            </>
+              <>
+                <div className="discord-connect-hero">
+                  <span className="discord-connect-icon">
+                    <DiscordLogoIcon />
+                  </span>
+                  <span>DISCORD PARTY</span>
+                </div>
+                <h1>
+                  친구들이 있는 Discord와
+                  <br />
+                  파티를 먼저 연결해 보세요
+                </h1>
+                <p>
+                  미션 제안과 성공·실패 투표가 Discord에도 실시간으로 전달돼요.
+                  <br />
+                  이미 봇을 설치하고 방을 연결했다면 바로 확인할 수 있습니다.
+                </p>
+                <div className="discord-connect-code">
+                  <span>현재 방 코드</span>
+                  <b>{room}</b>
+                  <button
+                    type="button"
+                    onClick={() => void copy(room, "방 코드를 복사했습니다.")}
+                  >
+                    <CopyIcon /> 복사
+                  </button>
+                </div>
+                <div className="discord-connect-steps">
+                  <article>
+                    <span>01</span>
+                    <div>
+                      <b>봇 설치</b>
+                      <p>
+                        친구들이 모인 Discord 서버에 PLAYSTAGE 봇을 추가해요.
+                      </p>
+                    </div>
+                  </article>
+                  <article>
+                    <span>02</span>
+                    <div>
+                      <b>/연결 실행</b>
+                      <p>
+                        원하는 채널에서 <code>/연결</code> 후 위 방 코드를
+                        입력해요.
+                      </p>
+                    </div>
+                  </article>
+                  <article>
+                    <span>03</span>
+                    <div>
+                      <b>연결 확인</b>
+                      <p>확인되면 방송 설정 화면으로 자동 이동해요.</p>
+                    </div>
+                  </article>
+                </div>
+                <div className="discord-auto-check">
+                  <CheckCircledIcon />
+                  <span>
+                    <b>연결 대기 중</b> Discord 채널 연결 여부를 자동으로
+                    확인하고 있어요.
+                  </span>
+                </div>
+                <div className="discord-connect-actions">
+                  <a
+                    href="/api/discord/install"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <DiscordLogoIcon /> Discord 봇 설치하기
+                  </a>
+                  <button
+                    type="button"
+                    className="skip"
+                    onClick={() => setDiscordGateDismissed(true)}
+                  >
+                    Discord 없이 방송하기
+                  </button>
+                </div>
+                <small>
+                  이미 봇이 설치되어 있다면 Discord 채널에서 <code>/연결</code>
+                  만 실행해 주세요.
+                </small>
+              </>
             )}
           </section>
         ) : (
-        <div className="studio-shell">
-          <section className="studio-console">
-            {!settingsDisabled ? (
-              <div className="studio-heading">
-                <div className={`discord-bot-guide ${discordConnected ? "connected" : ""}`}>
-                  <div className="discord-channel-icon"><DiscordLogoIcon /></div>
-                  <div>
-                    <b>{discordConnected ? "Discord 채널 연결됨" : "Discord 채널과 함께 쓰기"}</b>
-                    <p>{discordConnected ? `${discordChannelName ? `#${discordChannelName}` : "Discord"}에서 미션·투표 알림을 받을 수 있어요.` : "봇을 설치하고 /연결을 실행하면 미션·투표·포인트가 실시간으로 연결돼요."}</p>
+          <div className="studio-shell">
+            <section className="studio-console">
+              {!settingsDisabled ? (
+                <div className="studio-heading">
+                  <div
+                    className={`discord-bot-guide ${discordConnected ? "connected" : ""}`}
+                  >
+                    <div className="discord-channel-icon">
+                      <DiscordLogoIcon />
+                    </div>
+                    <div>
+                      <b>
+                        {discordConnected
+                          ? "Discord 채널 연결됨"
+                          : "Discord 채널과 함께 쓰기"}
+                      </b>
+                      <p>
+                        {discordConnected
+                          ? `${discordChannelName ? `#${discordChannelName}` : "Discord"}에서 미션·투표 알림을 받을 수 있어요.`
+                          : "봇을 설치하고 /연결을 실행하면 미션·투표·포인트가 실시간으로 연결돼요."}
+                      </p>
+                    </div>
+                    {discordConnected ? (
+                      <button
+                        type="button"
+                        onClick={() => void notifyDiscord()}
+                      >
+                        연결 확인
+                      </button>
+                    ) : (
+                      <a href="/api/discord/install">봇 설치</a>
+                    )}
                   </div>
-                  {discordConnected ? <button type="button" onClick={() => void notifyDiscord()}>연결 확인</button> : <a href="/api/discord/install">봇 설치</a>}
+                  <div className="studio-heading-copy">
+                    <span>방송 설정</span>
+                    <p>친구에게 보여줄 방송 정보를 입력하세요.</p>
+                  </div>
+                  <div className="studio-heading-row">
+                    <div className="studio-controls">
+                      <label>
+                        방 제목
+                        <input
+                          autoFocus={!discordCreatedRoom}
+                          value={roomTitle}
+                          onChange={(event) =>
+                            setRoomTitle(event.target.value.slice(0, 50))
+                          }
+                          placeholder="예: 금요일 저녁 게임 파티"
+                          maxLength={50}
+                          readOnly={discordCreatedRoom}
+                          aria-readonly={discordCreatedRoom}
+                        />
+                      </label>
+                      <label>
+                        방 코드
+                        <input value={room} readOnly aria-readonly="true" />
+                      </label>
+                      <button
+                        className="start-button"
+                        onClick={() => void start()}
+                        disabled={!room || !roomTitle.trim()}
+                      >
+                        <DesktopIcon /> 화면 공유 시작
+                      </button>
+                    </div>
+                    <span className="studio-live">OFFLINE</span>
+                  </div>
                 </div>
-                <div className="studio-heading-copy">
-                  <span>방송 설정</span>
-                  <p>친구에게 보여줄 방송 정보를 입력하세요.</p>
+              ) : (
+                <div className="studio-session-bar">
+                  <div>
+                    <span className="studio-live on">LIVE · {viewers}명</span>
+                    <div>
+                      <b>{roomTitle}</b>
+                      <small>{room}</small>
+                    </div>
+                  </div>
+                  <div className="studio-health">
+                    <span className={connection === "연결됨" ? "healthy" : ""}>
+                      ● {connection}
+                    </span>
+                    <span>
+                      {settings?.width || "자동"}×{settings?.height || "자동"}
+                    </span>
+                    <span>
+                      {audioEnabled ? "시스템 소리 ON" : "시스템 소리 OFF"}
+                    </span>
+                  </div>
                 </div>
-                <div className="studio-heading-row">
-                  <div className="studio-controls">
-                    <label>
-                      방 제목
-                      <input autoFocus={!discordCreatedRoom} value={roomTitle} onChange={(event) => setRoomTitle(event.target.value.slice(0, 50))} placeholder="예: 금요일 저녁 게임 파티" maxLength={50} readOnly={discordCreatedRoom} aria-readonly={discordCreatedRoom} />
-                    </label>
-                    <label>
-                      방 코드
-                      <input value={room} readOnly aria-readonly="true" />
-                    </label>
-                    <button className="start-button" onClick={() => void start()} disabled={!room || !roomTitle.trim()}>
-                      <DesktopIcon /> 화면 공유 시작
+              )}
+
+              <div className="studio-preview" ref={previewShell}>
+                <video ref={preview} autoPlay muted playsInline />
+                <PartyOverlay items={overlay} host />
+                {!settingsDisabled && (
+                  <div className="preview-empty">
+                    <DesktopIcon />
+                    <b>공유할 화면을 선택해 주세요</b>
+                  </div>
+                )}
+                {paused && (
+                  <div className="studio-paused-screen">
+                    <PauseIcon />
+                    <b>화면 공유 일시정지</b>
+                  </div>
+                )}
+                {activeMission && settingsDisabled && (
+                  <div className="studio-active-mission">
+                    <span>진행 중인 미션</span>
+                    <b>{activeMission.title}</b>
+                    <small>
+                      성공 {activeMission.success} · 실패 {activeMission.fail}
+                    </small>
+                  </div>
+                )}
+                {settingsDisabled && (
+                  <div className="studio-stage-toolbar">
+                    <button
+                      type="button"
+                      onClick={() => void switchScreen()}
+                      title="화면 전환"
+                    >
+                      <UpdateIcon />
+                      <span>화면 전환</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={togglePause}
+                      title={paused ? "공유 재개" : "일시정지"}
+                    >
+                      {paused ? <PlayIcon /> : <PauseIcon />}
+                      <span>{paused ? "재개" : "일시정지"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={audioEnabled ? "active" : ""}
+                      onClick={toggleAudio}
+                      title="시스템 소리"
+                    >
+                      {audioEnabled ? <SpeakerLoudIcon /> : <SpeakerOffIcon />}
+                      <span>소리</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearOverlay}
+                      title="낙서 초기화"
+                    >
+                      <TrashIcon />
+                      <span>낙서 삭제</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void toggleFullscreen()}
+                      title="전체화면"
+                    >
+                      {fullscreen ? (
+                        <ExitFullScreenIcon />
+                      ) : (
+                        <EnterFullScreenIcon />
+                      )}
+                      <span>전체화면</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => void stop()}
+                      title="공유 종료"
+                    >
+                      <StopIcon />
+                      <span>종료</span>
                     </button>
                   </div>
-                  <span className="studio-live">OFFLINE</span>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="studio-session-bar">
-                <div>
-                  <span className="studio-live on">LIVE · {viewers}명</span>
-                  <div><b>{roomTitle}</b><small>{room}</small></div>
-                </div>
-                <div className="studio-health">
-                  <span className={connection === "연결됨" ? "healthy" : ""}>● {connection}</span>
-                  <span>{settings?.width || "자동"}×{settings?.height || "자동"}</span>
-                  <span>{audioEnabled ? "시스템 소리 ON" : "시스템 소리 OFF"}</span>
-                </div>
-              </div>
-            )}
 
-            <div className="studio-preview" ref={previewShell}>
-              <video ref={preview} autoPlay muted playsInline />
-              <PartyOverlay items={overlay} host />
-              {!settingsDisabled && <div className="preview-empty"><DesktopIcon /><b>공유할 화면을 선택해 주세요</b></div>}
-              {paused && <div className="studio-paused-screen"><PauseIcon /><b>화면 공유 일시정지</b></div>}
-              {activeMission && settingsDisabled && (
-                <div className="studio-active-mission">
-                  <span>진행 중인 미션</span>
-                  <b>{activeMission.title}</b>
-                  <small>성공 {activeMission.success} · 실패 {activeMission.fail}</small>
-                </div>
-              )}
               {settingsDisabled && (
-                <div className="studio-stage-toolbar">
-                  <button type="button" onClick={() => void switchScreen()} title="화면 전환"><UpdateIcon /><span>화면 전환</span></button>
-                  <button type="button" onClick={togglePause} title={paused ? "공유 재개" : "일시정지"}>{paused ? <PlayIcon /> : <PauseIcon />}<span>{paused ? "재개" : "일시정지"}</span></button>
-                  <button type="button" className={audioEnabled ? "active" : ""} onClick={toggleAudio} title="시스템 소리">{audioEnabled ? <SpeakerLoudIcon /> : <SpeakerOffIcon />}<span>소리</span></button>
-                  <button type="button" onClick={clearOverlay} title="낙서 초기화"><TrashIcon /><span>낙서 삭제</span></button>
-                  <button type="button" onClick={() => void toggleFullscreen()} title="전체화면">{fullscreen ? <ExitFullScreenIcon /> : <EnterFullScreenIcon />}<span>전체화면</span></button>
-                  <button type="button" className="danger" onClick={() => void stop()} title="공유 종료"><StopIcon /><span>종료</span></button>
+                <div className="studio-invite-actions">
+                  <button
+                    type="button"
+                    onClick={() => void copy(room, "방 코드를 복사했습니다.")}
+                  >
+                    <CopyIcon /> 코드 복사
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copy(inviteUrl, "시청 링크를 복사했습니다.")
+                    }
+                  >
+                    <Link2Icon /> 링크 복사
+                  </button>
+                  <button type="button" onClick={() => void notifyDiscord()}>
+                    <DiscordLogoIcon /> Discord에 다시 알림
+                  </button>
                 </div>
               )}
-            </div>
+              {error && <p className="studio-error">{error}</p>}
+            </section>
 
-            {settingsDisabled && (
-              <div className="studio-invite-actions">
-                <button type="button" onClick={() => void copy(room, "방 코드를 복사했습니다.")}><CopyIcon /> 코드 복사</button>
-                <button type="button" onClick={() => void copy(inviteUrl, "시청 링크를 복사했습니다.")}><Link2Icon /> 링크 복사</button>
-                <button type="button" onClick={() => void notifyDiscord()}><DiscordLogoIcon /> Discord에 다시 알림</button>
-              </div>
-            )}
-            {error && <p className="studio-error">{error}</p>}
-          </section>
-
-          <aside className="studio-chat studio-side-panel">
-            <Tabs.Root defaultValue="chat">
-              <Tabs.List className="studio-tab-list">
-                <Tabs.Trigger value="chat"><ChatBubbleIcon /> 채팅 <span>{messages.length}</span></Tabs.Trigger>
-                <Tabs.Trigger value="missions"><TargetIcon /> 미션 <span>{missions.length}</span></Tabs.Trigger>
-                <Tabs.Trigger value="people"><PersonIcon /> 참가자 <span>{Object.keys(participants).length}</span></Tabs.Trigger>
-              </Tabs.List>
-              <Tabs.Content value="chat" className="studio-tab-content">
-                {messages.length === 0 ? <p className="studio-empty">친구들이 보낸 채팅이 여기에 표시됩니다.</p> : messages.map((message) => <article key={message.id}><b>{message.name}</b><span>{message.text}</span></article>)}
-              </Tabs.Content>
-              <Tabs.Content value="missions" className="studio-tab-content studio-mission-list">
-                {missions.length === 0 ? <p className="studio-empty">친구가 미션을 등록하면 여기에 표시됩니다.</p> : missions.map((mission) => <article key={mission.id}><div><span>{mission.status === "active" ? "진행 중" : "결과 확정"}</span><small>제안자 · {mission.creator}</small></div><b>{mission.title}</b><p><em>성공 {mission.success}</em><em>실패 {mission.fail}</em></p></article>)}
-              </Tabs.Content>
-              <Tabs.Content value="people" className="studio-tab-content studio-participant-list">
-                {Object.keys(participants).length === 0 ? <p className="studio-empty">아직 입장한 친구가 없습니다.</p> : Object.entries(participants).map(([id, name]) => <article key={id}><span className="studio-avatar">P</span><div><b>{name}</b><small>시청 중 · 연결됨</small></div><i /></article>)}
-              </Tabs.Content>
-            </Tabs.Root>
-          </aside>
-        </div>
+            <aside className="studio-chat studio-side-panel">
+              <Tabs.Root defaultValue="chat">
+                <Tabs.List className="studio-tab-list">
+                  <Tabs.Trigger value="chat">
+                    <ChatBubbleIcon /> 채팅 <span>{messages.length}</span>
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="missions">
+                    <TargetIcon /> 미션 <span>{missions.length}</span>
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="people">
+                    <PersonIcon /> 참가자{" "}
+                    <span>{Object.keys(participants).length}</span>
+                  </Tabs.Trigger>
+                </Tabs.List>
+                <Tabs.Content value="chat" className="studio-tab-content">
+                  {messages.length === 0 ? (
+                    <p className="studio-empty">
+                      친구들이 보낸 채팅이 여기에 표시됩니다.
+                    </p>
+                  ) : (
+                    messages.map((message) => (
+                      <article key={message.id}>
+                        <b>{message.name}</b>
+                        <span>{message.text}</span>
+                      </article>
+                    ))
+                  )}
+                </Tabs.Content>
+                <Tabs.Content
+                  value="missions"
+                  className="studio-tab-content studio-mission-list"
+                >
+                  {missions.length === 0 ? (
+                    <p className="studio-empty">
+                      친구가 미션을 등록하면 여기에 표시됩니다.
+                    </p>
+                  ) : (
+                    missions.map((mission) => (
+                      <article key={mission.id}>
+                        <div>
+                          <span>
+                            {mission.status === "active"
+                              ? "진행 중"
+                              : "결과 확정"}
+                          </span>
+                          <small>제안자 · {mission.creator}</small>
+                        </div>
+                        <b>{mission.title}</b>
+                        <p>
+                          <em>성공 {mission.success}</em>
+                          <em>실패 {mission.fail}</em>
+                        </p>
+                      </article>
+                    ))
+                  )}
+                </Tabs.Content>
+                <Tabs.Content
+                  value="people"
+                  className="studio-tab-content studio-participant-list"
+                >
+                  {Object.keys(participants).length === 0 ? (
+                    <p className="studio-empty">아직 입장한 친구가 없습니다.</p>
+                  ) : (
+                    Object.entries(participants).map(([id, name]) => (
+                      <article key={id}>
+                        <span className="studio-avatar">P</span>
+                        <div>
+                          <b>{name}</b>
+                          <small>시청 중 · 연결됨</small>
+                        </div>
+                        <i />
+                      </article>
+                    ))
+                  )}
+                </Tabs.Content>
+              </Tabs.Root>
+            </aside>
+          </div>
         )}
       </main>
 
-      <Toast.Root className="room-copy-toast" open={Boolean(notice)} onOpenChange={(open) => !open && setNotice("")}>
+      <Toast.Root
+        className="room-copy-toast"
+        open={Boolean(notice)}
+        onOpenChange={(open) => !open && setNotice("")}
+      >
         <CheckCircledIcon aria-hidden="true" />
         <Toast.Title>{notice}</Toast.Title>
       </Toast.Root>

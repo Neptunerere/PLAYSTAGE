@@ -410,6 +410,9 @@ body[data-scroll-locked] {
   box-shadow: none;
   animation: none;
 }
+.discord-connect-gate.is-loading {
+  animation: none;
+}
 .discord-connect-placeholder {
   min-height: 405px;
 }
