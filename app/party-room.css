@@ -390,6 +390,13 @@
   border-color: #ff5877;
   color: #ff5877;
 }
+.vote-buttons button:disabled,
+.vote-buttons button:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.45;
+  color: #a9b0bb;
+  border-color: #343b45;
+}
 .chat-tab {
   height: 587px;
   display: flex;

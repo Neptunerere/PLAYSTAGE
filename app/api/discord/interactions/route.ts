@@ -9,6 +9,7 @@ import {
   type MissionCard,
 } from "@/lib/discord-bot";
 import { requestOrigin } from "@/lib/request-origin";
+import { castMissionVote, type MissionVote } from "@/lib/mission-votes";
 
 type DiscordUser = {
   id: string;
@@ -72,6 +73,7 @@ function isValidSignature(body: string, signature: string, timestamp: string) {
 function option(interaction: Interaction, name: string) {
   const aliases: Record<string, string[]> = {
     title: ["title", "제목", "내용"],
+    code: ["code", "방코드"],
     reward: ["reward", "보상"],
     user: ["user", "친구"],
     amount: ["amount", "포인트"],
@@ -207,6 +209,107 @@ async function createParty(
   }
 }
 
+async function connectParty(
+  interaction: Interaction,
+  request: NextRequest,
+  user: DiscordUser,
+  guildId: string,
+  channelId: string,
+) {
+  try {
+    const sql = neon(process.env.DATABASE_URL!);
+    const roomCode = String(option(interaction, "code") || "")
+      .trim()
+      .slice(0, 20);
+
+    if (!/^[a-zA-Z0-9-]+$/.test(roomCode)) {
+      await editDeferredResponse(interaction, {
+        content: "방 코드는 영문, 숫자와 하이픈(-)만 입력할 수 있어요.",
+        components: [],
+      });
+      return;
+    }
+
+    const [room] = await sql.query(
+      `select id, title, code, status from rooms where code = $1 limit 1`,
+      [roomCode],
+    );
+    if (!room) {
+      await editDeferredResponse(interaction, {
+        content: "해당 방 코드를 찾지 못했어요. 종료된 방송이거나 코드를 다시 확인해 주세요.",
+        components: [],
+      });
+      return;
+    }
+
+    await sql.query(
+      `insert into discord_guilds (guild_id, name) values ($1, $2)
+       on conflict (guild_id) do update set name = excluded.name`,
+      [guildId, interaction.guild?.name || null],
+    );
+    await sql.query(
+      `insert into discord_channels (channel_id, guild_id, name) values ($1, $2, $3)
+       on conflict (channel_id) do update set guild_id = excluded.guild_id, name = excluded.name`,
+      [channelId, guildId, interaction.channel?.name || null],
+    );
+    await sql.query(`delete from room_discord where channel_id = $1`, [channelId]);
+    await sql.query(
+      `insert into room_discord (room_id, guild_id, channel_id, host_discord_id)
+       values ($1, $2, $3, $4)
+       on conflict (room_id) do update set
+         guild_id = excluded.guild_id,
+         channel_id = excluded.channel_id,
+         host_discord_id = excluded.host_discord_id,
+         created_at = now()`,
+      [room.id, guildId, channelId, user.id],
+    );
+
+    const origin = requestOrigin(request);
+    const isLive = room.status === "live";
+    await editDeferredResponse(interaction, {
+      content: `✅ **${room.title}** 방송을 이 채널에 연결했어요.`,
+      embeds: [
+        {
+          title: `${isLive ? "🔴 LIVE" : "🎮 연결 완료"} · ${room.title}`,
+          description: isLive
+            ? "현재 화면 공유가 진행 중이에요. 이제 이 채널에서 미션과 투표를 함께할 수 있어요."
+            : "호스트가 화면 공유를 시작하면 이 채널에 자동으로 알려드릴게요.",
+          color: isLive ? 0xff4568 : 0x4f7cff,
+          fields: [{ name: "방 코드", value: `\`${room.code}\`` }],
+          footer: {
+            text: `${user.global_name || user.username}님이 연결함`,
+          },
+        },
+      ],
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 5,
+              label: "친구 파티 참가",
+              url: `${origin}/live?room=${room.code}`,
+            },
+            {
+              type: 2,
+              style: 5,
+              label: "호스트 화면 열기",
+              url: `${origin}/studio?room=${room.code}`,
+            },
+          ],
+        },
+      ],
+    });
+  } catch (error) {
+    console.error("Discord room connection failed", error);
+    await editDeferredResponse(interaction, {
+      content: "방송을 Discord 채널에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      components: [],
+    }).catch(console.error);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-signature-ed25519") || "";
@@ -233,6 +336,16 @@ export async function POST(request: NextRequest) {
     waitUntil(createParty(interaction, request, user, guildId, channelId));
     return NextResponse.json({ type: 5, data: { flags: ephemeral } });
   }
+  if (
+    user &&
+    guildId &&
+    channelId &&
+    interaction.type === 2 &&
+    ["connect", "연결"].includes(interaction.data?.name || "")
+  ) {
+    waitUntil(connectParty(interaction, request, user, guildId, channelId));
+    return NextResponse.json({ type: 5 });
+  }
   if (!user || !guildId || !channelId)
     return response("Discord 서버 채널에서 사용해 주세요.");
   await sql.query(
@@ -246,6 +359,7 @@ export async function POST(request: NextRequest) {
   if (interaction.type === 2) {
     const commandAliases: Record<string, string> = {
       파티: "party",
+      연결: "connect",
       미션: "mission",
       포인트: "points",
       선물: "gift",
@@ -440,67 +554,21 @@ export async function POST(request: NextRequest) {
     )
       return response("처리할 수 없는 버튼이에요.");
 
-    const [current] = await sql.query(
-      `select vote from mission_votes where mission_id = $1 and discord_user_id = $2`,
-      [missionId, user.id],
+    const result = await castMissionVote(
+      missionId,
+      user.id,
+      vote as MissionVote,
     );
-    const oldVote = current?.vote as "success" | "fail" | undefined;
-    if (oldVote !== vote) {
-      await sql.query(
-        `insert into mission_votes (mission_id, discord_user_id, vote)
-         values ($1, $2, $3)
-         on conflict (mission_id, discord_user_id)
-         do update set vote = excluded.vote, updated_at = now()`,
-        [missionId, user.id, vote],
-      );
-      const successDelta =
-        (vote === "success" ? 1 : 0) - (oldVote === "success" ? 1 : 0);
-      const failDelta =
-        (vote === "fail" ? 1 : 0) - (oldVote === "fail" ? 1 : 0);
-      await sql.query(
-        `update missions set
-           success = greatest(0, success + $2), fail = greatest(0, fail + $3),
-           status = case
-             when success + $2 >= 3 then 'success'
-             when fail + $3 >= 3 then 'fail'
-             else status end
-         where id = $1 and status = 'active'`,
-        [missionId, successDelta, failDelta],
-      );
-    }
-
-    await sql.query(
-      `insert into point_ledger (guild_id, discord_user_id, amount, reason, reference_key)
-       values ($1, $2, 5, 'mission_vote', $3)
-       on conflict (reference_key) do nothing`,
-      [guildId, user.id, `vote:${missionId}:${user.id}`],
-    );
-    const [mission] = await sql.query(
-      `select m.id, m.title, m.creator, m.creator_discord_id as "creatorDiscordId",
-              m.reward, m.status, m.success, m.fail, r.code as "roomCode"
-       from missions m join rooms r on r.id = m.room_id where m.id = $1`,
-      [missionId],
-    );
+    const mission = result.mission;
     if (!mission)
       return response("이미 종료되었거나 존재하지 않는 미션이에요.");
+    if (!result.accepted)
+      return response("이미 이 미션에 투표했습니다.");
     if (interaction.message?.id)
       await sql.query(
         `update missions set discord_message_id = $2, discord_channel_id = $3 where id = $1`,
         [missionId, interaction.message.id, channelId],
       );
-    if (mission.status === "success" && mission.creatorDiscordId) {
-      await sql.query(
-        `insert into point_ledger (guild_id, discord_user_id, amount, reason, reference_key)
-         values ($1, $2, $3, 'mission_success', $4)
-         on conflict (reference_key) do nothing`,
-        [
-          guildId,
-          mission.creatorDiscordId,
-          mission.reward,
-          `mission-reward:${missionId}`,
-        ],
-      );
-    }
     await publishRoomEvent(mission.roomCode, {
       type: "mission-updated",
       mission,

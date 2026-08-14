@@ -27,6 +27,26 @@ const commands = [
     ],
   },
   {
+    name: "connect",
+    name_localizations: { ko: "연결" },
+    description: "Connect an existing PLAYSTAGE room to this channel",
+    description_localizations: {
+      ko: "이미 만든 PLAYSTAGE 방송을 이 채널에 연결해요",
+    },
+    options: [
+      {
+        type: 3,
+        name: "code",
+        name_localizations: { ko: "방코드" },
+        description: "PLAYSTAGE room code",
+        description_localizations: { ko: "웹 방송 화면에 표시된 방 코드" },
+        required: true,
+        min_length: 1,
+        max_length: 20,
+      },
+    ],
+  },
+  {
     name: "mission",
     name_localizations: { ko: "미션" },
     description: "Create a mission in the current party",

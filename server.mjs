@@ -22,7 +22,7 @@ const rooms = new Map();
 const roomTitles = new Map();
 const hostDisconnectTimers = new Map();
 const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
-const HOST_RECONNECT_GRACE_MS = 8_000;
+const HOST_RECONNECT_GRACE_MS = 40_000;
 const appOrigin = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
 
 function discordMissionPayload(mission) {
@@ -107,12 +107,18 @@ async function updateDiscordMission(missionId) {
 }
 
 async function deleteRoomRecord(roomCode) {
-  if (!sql) return;
+  if (!sql) return false;
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      await sql.query("delete from rooms where code = $1", [roomCode]);
-      return;
+      const deleted = await sql.query(
+        `delete from rooms
+          where code = $1 and status = 'live'
+            and (host_heartbeat_at is null or host_heartbeat_at < now() - interval '30 seconds')
+          returning id`,
+        [roomCode],
+      );
+      return deleted.length > 0;
     } catch (error) {
       lastError = error;
       await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
@@ -137,7 +143,8 @@ function scheduleRoomClose(roomId) {
     if (hostReconnected) return;
 
     try {
-      await deleteRoomRecord(roomId);
+      const deleted = await deleteRoomRecord(roomId);
+      if (!deleted) return;
     } catch (error) {
       console.error("Failed to delete disconnected host room", error);
     }
@@ -222,6 +229,29 @@ wss.on("connection", (socket, request, clientInfo) => {
       return;
     }
 
+    if (message.type === "missions-request" && role === "broadcaster") {
+      try {
+        send(socket, { type: "missions-sync", missions: await getRoomMissions(roomId) });
+      } catch (error) {
+        console.error("Failed to load host missions", error);
+      }
+      return;
+    }
+
+    if (message.type === "viewer-profile" && role === "viewer") {
+      const name = String(message.name || "친구").trim().slice(0, 24);
+      broadcast(roomId, { type: "viewer-profile", from: id, name });
+      return;
+    }
+
+    if (
+      role === "broadcaster" &&
+      ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(message.type)
+    ) {
+      broadcast(roomId, { type: message.type, from: id }, id);
+      return;
+    }
+
     if (message.type === "viewer-ready") {
       try {
         const missions = await getRoomMissions(roomId);
@@ -295,37 +325,6 @@ wss.on("connection", (socket, request, clientInfo) => {
       for (const client of clients.values()) {
         if (client.role === "broadcaster")
           send(client.socket, { type: "quality-request", quality });
-      }
-      return;
-    }
-
-    if (message.type === "mission-vote") {
-      const vote =
-        message.vote === "success"
-          ? "success"
-          : message.vote === "fail"
-            ? "fail"
-            : null;
-      if (!vote || !message.missionId || !sql) return;
-      const column = vote === "success" ? "success" : "fail";
-      try {
-        const [mission] = await sql.query(
-          `update missions m
-           set ${column} = ${column} + 1
-           from rooms r
-           where m.room_id = r.id and r.code = $1 and m.id = $2
-           returning m.id, m.title, m.creator, m.status, m.success, m.fail`,
-          [roomId, String(message.missionId)],
-        );
-        if (mission) {
-          broadcast(roomId, { type: "mission-updated", mission });
-          void updateDiscordMission(mission.id).catch((error) =>
-            console.error("Failed to update Discord mission", error),
-          );
-        }
-      } catch (error) {
-        console.error("Failed to vote mission", error);
-        send(socket, { type: "mission-error" });
       }
       return;
     }

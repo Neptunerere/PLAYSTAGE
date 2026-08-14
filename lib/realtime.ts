@@ -2,10 +2,7 @@ import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import type { WebSocket } from "ws";
 import { redis } from "./redis";
-import {
-  postMissionToDiscord,
-  updateDiscordMissionMessage,
-} from "./discord-bot";
+import { postMissionToDiscord } from "./discord-bot";
 
 type Client = { id: string; role: "broadcaster" | "viewer"; socket: WebSocket };
 type Payload = Record<string, unknown> & { type: string; target?: string };
@@ -62,8 +59,16 @@ async function getRoomMissions(room: string) {
   );
 }
 
-async function deleteRoom(room: string) {
-  if (sql) await sql.query("delete from rooms where code = $1", [room]);
+async function deleteStaleRoom(room: string) {
+  if (!sql) return false;
+  const deleted = await sql.query(
+    `delete from rooms
+      where code = $1 and status = 'live'
+        and (host_heartbeat_at is null or host_heartbeat_at < now() - interval '30 seconds')
+      returning id`,
+    [room],
+  );
+  return deleted.length > 0;
 }
 
 export function registerRealtimeClient(
@@ -103,14 +108,16 @@ export function registerRealtimeClient(
         const currentHost = await redis?.get(hostKey(room));
         if (currentHost && currentHost !== id) return;
         if (currentHost === id) await redis?.del(hostKey(room));
-        await deleteRoom(room).catch((error) =>
-          console.error("Failed to delete disconnected room", error),
-        );
+        const deleted = await deleteStaleRoom(room).catch((error) => {
+          console.error("Failed to delete disconnected room", error);
+          return false;
+        });
+        if (!deleted) return;
         await publish(room, {
           type: "room-closed",
           reason: "host-disconnected",
         });
-      }, 8_000);
+      }, 40_000);
     }
   });
 }
@@ -138,6 +145,24 @@ async function handleMessage(
       .trim()
       .slice(0, 50);
     if (title) await publish(room, { type, title });
+    return;
+  }
+  if (type === "missions-request" && role === "broadcaster") {
+    socket.send(
+      JSON.stringify({ type: "missions-sync", missions: await getRoomMissions(room) }),
+    );
+    return;
+  }
+  if (type === "viewer-profile" && role === "viewer") {
+    const name = String(message.name || "친구").trim().slice(0, 24);
+    await publish(room, { type, from: id, name });
+    return;
+  }
+  if (
+    role === "broadcaster" &&
+    ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(type)
+  ) {
+    await publish(room, { type, from: id });
     return;
   }
   if (type === "viewer-ready") {
@@ -181,28 +206,6 @@ async function handleMessage(
       await publish(room, { type: "mission", mission });
       void postMissionToDiscord(room, String(mission.id), appOrigin).catch(
         (error) => console.error("Failed to post Discord mission", error),
-      );
-    }
-    return;
-  }
-  if (type === "mission-vote" && sql) {
-    const column =
-      message.vote === "success"
-        ? "success"
-        : message.vote === "fail"
-          ? "fail"
-          : null;
-    if (!column || !message.missionId) return;
-    const [mission] = await sql.query(
-      `update missions m set ${column} = ${column} + 1 from rooms r
-       where m.room_id = r.id and r.code = $1 and m.id = $2
-       returning m.id, m.title, m.creator, m.status, m.success, m.fail`,
-      [room, String(message.missionId)],
-    );
-    if (mission) {
-      await publish(room, { type: "mission-updated", mission });
-      void updateDiscordMissionMessage(String(mission.id), appOrigin).catch(
-        (error) => console.error("Failed to update Discord mission", error),
       );
     }
     return;
