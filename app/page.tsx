@@ -201,7 +201,7 @@ export default function PartyHome() {
       <section className="party-hero">
         <div className="party-hero-copy">
           <span className="eyebrow">
-            <span /> FRIENDS ONLY GAME PARTY
+            <span /> DISCORD PARTY COMPANION
           </span>
           <h1>
             같이 보고,
@@ -210,9 +210,9 @@ export default function PartyHome() {
             <br />더 재밌게 플레이
           </h1>
           <p>
-            친구들과 비공개 파티를 열어보세요.
+            Discord로 대화하고, PLAYSTAGE로 같이 놀아보세요.
             <br />
-            화면을 공유하고 미션의 성공 여부를 함께 결정해요.
+            친구가 미션을 걸고 성공 여부를 함께 결정해요.
           </p>
           <div className="hero-actions">
             <button className="create-party" onClick={createParty}>
@@ -284,8 +284,8 @@ export default function PartyHome() {
           <div className="private-note">
             <LockClosedIcon />
             <span>
-              <b>초대받은 친구만 입장</b>방 코드를 가진 사람끼리 안전하게
-              즐겨요.
+              <b>Discord 친구에게 바로 초대</b>방을 만든 뒤 초대 링크를
+              Discord에 붙여넣으면 돼요.
             </span>
           </div>
         </div>
@@ -335,7 +335,11 @@ export default function PartyHome() {
         <div className="step-grid">
           {[
             ["01", "파티 만들기", "방을 만들고 코드를 친구에게 공유하세요."],
-            ["02", "화면 공유", "게임 화면과 시스템 소리를 함께 띄워요."],
+            [
+              "02",
+              "Discord에서 모이기",
+              "음성 대화는 익숙한 Discord에서 이어가요.",
+            ],
             ["03", "미션 도전", "친구들이 미션을 걸고 성공을 판정해요."],
           ].map(([number, title, body]) => (
             <article

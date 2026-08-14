@@ -27,6 +27,10 @@ export async function POST(request: Request) {
     const [room] = await getDb()
       .insert(rooms)
       .values({ title, code })
+      .onConflictDoUpdate({
+        target: rooms.code,
+        set: { title },
+      })
       .returning();
 
     return NextResponse.json({ room }, { status: 201 });
