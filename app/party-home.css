@@ -508,7 +508,7 @@ body:has(.party-home) {
   border-bottom: 1px solid #30353c;
 }
 .mission-section {
-  height: calc(100svh - 174px);
+  height: calc(100svh - 214px);
 }
 
 .party-hero-copy,
@@ -779,12 +779,14 @@ body:has(.party-home) {
   right: 0;
   bottom: 0;
   z-index: 3;
-  height: 110px;
+  height: 150px;
   border-top: 1px solid #30353c;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 max(24px, calc((100% - 1080px) / 2));
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 54px;
+  padding: 24px max(28px, calc((100% - 1320px) / 2));
   color: #757e8d;
   font-size: 11px;
   opacity: 0;
@@ -794,6 +796,39 @@ body:has(.party-home) {
     opacity 320ms ease 180ms,
     transform 480ms cubic-bezier(0.22, 1, 0.36, 1) 180ms,
     visibility 0s linear 620ms;
+}
+.party-footer-brand {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.party-footer-brand small,
+.party-footer-links > span,
+.party-footer-service > span {
+  color: #717a88;
+  font-size: 11px;
+}
+.party-footer-links nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 10px;
+}
+.party-footer-links a {
+  color: #c6ccd5;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.party-footer-links a:hover {
+  color: #fff;
+}
+.party-footer-service p {
+  max-width: 290px;
+  margin: 10px 0 0;
+  color: #9ba3af;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .party-home footer.active-section {
   opacity: 1;
@@ -970,6 +1005,13 @@ body:has(.party-home) {
     visibility: visible;
     transform: none;
   }
+  .party-home footer {
+    grid-template-columns: 1fr 1fr;
+    height: auto;
+  }
+  .party-footer-service {
+    grid-column: 1 / -1;
+  }
   .step-grid,
   .idea-grid {
     grid-template-columns: 1fr 1fr;
@@ -1016,6 +1058,14 @@ body:has(.party-home) {
     padding: 65px 18px;
   }
   .party-home footer p {
-    display: none;
+    display: block;
+  }
+  .party-home footer {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 30px 20px;
+  }
+  .party-footer-service {
+    grid-column: auto;
   }
 }

@@ -7,6 +7,7 @@ import "./browse-theme.css";
 import "./party-home.css";
 import "./party-room.css";
 import "./readable-type.css";
+import "./policy.css";
 
 const jua = localFont({
   src: "../public/fonts/BMJUA.ttf",
