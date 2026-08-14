@@ -22,6 +22,7 @@ export async function GET(
         title: true,
         code: true,
         status: true,
+        createdVia: true,
         hostHeartbeatAt: true,
       },
       where: eq(rooms.code, code),

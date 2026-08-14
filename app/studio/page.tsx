@@ -22,8 +22,6 @@ import {
 } from "@radix-ui/react-icons";
 import { Tabs, Toast } from "radix-ui";
 import {
-  type FormEvent,
-  type KeyboardEvent,
   useEffect,
   useRef,
   useState,
@@ -53,24 +51,6 @@ type Msg = {
 };
 type Chat = { id: string; name: string; text: string };
 
-function preventInvalidRoomCodeInput(event: FormEvent<HTMLInputElement>) {
-  const value = (event.nativeEvent as InputEvent).data;
-  if (value && /[^a-zA-Z0-9-]/.test(value)) event.preventDefault();
-}
-function preventInvalidRoomCodeKey(event: KeyboardEvent<HTMLInputElement>) {
-  if (
-    event.nativeEvent.isComposing ||
-    event.key === "Process" ||
-    (event.key.length === 1 && !/[a-zA-Z0-9-]/.test(event.key))
-  )
-    event.preventDefault();
-}
-function createRoomCode(length = 20) {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const values = new Uint8Array(length);
-  crypto.getRandomValues(values);
-  return Array.from(values, (value) => alphabet[value % alphabet.length]).join("");
-}
 const iceDone = (pc: RTCPeerConnection) =>
   pc.iceGatheringState === "complete"
     ? Promise.resolve()
@@ -83,6 +63,29 @@ const iceDone = (pc: RTCPeerConnection) =>
         };
         pc.addEventListener("icegatheringstatechange", done);
       });
+
+let pendingRoomReservation: Promise<{ code: string }> | null = null;
+
+function reserveRoom() {
+  if (!pendingRoomReservation) {
+    pendingRoomReservation = fetch("/api/rooms/reserve", { method: "POST" })
+      .then(async (response) => {
+        const result = (await response.json().catch(() => null)) as {
+          room?: { code?: string };
+          error?: string;
+        } | null;
+        if (!response.ok || !result?.room?.code)
+          throw new Error(result?.error || "파티를 준비하지 못했습니다.");
+        return { code: result.room.code };
+      })
+      .finally(() => {
+        window.setTimeout(() => {
+          pendingRoomReservation = null;
+        }, 1000);
+      });
+  }
+  return pendingRoomReservation;
+}
 
 export default function Studio() {
   const preview = useRef<HTMLVideoElement>(null);
@@ -118,15 +121,50 @@ export default function Studio() {
   const [discordGateDismissed, setDiscordGateDismissed] = useState(false);
   const [roomInitialized, setRoomInitialized] = useState(false);
   const [showDiscordLoading, setShowDiscordLoading] = useState(false);
+  const [discordCreatedRoom, setDiscordCreatedRoom] = useState(false);
 
   useEffect(() => {
-    const raw = new URLSearchParams(location.search).get("room");
-    const requested = raw?.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20);
-    setRoom(requested || createRoomCode());
-    setRoomInitialized(true);
+    let cancelled = false;
+    const initializeRoom = async () => {
+      const raw = new URLSearchParams(location.search).get("room");
+      const requested = raw?.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20);
+      try {
+        if (requested) {
+          const response = await fetch(`/api/rooms/${encodeURIComponent(requested)}`, {
+            cache: "no-store",
+          });
+          if (!response.ok) throw new Error("존재하지 않거나 종료된 파티입니다.");
+          const result = (await response.json()) as {
+            room?: { code?: string; title?: string; createdVia?: string };
+          };
+          if (!cancelled) {
+            setRoom(result.room?.code || requested);
+            const fromDiscord = result.room?.createdVia === "discord";
+            setDiscordCreatedRoom(fromDiscord);
+            if (
+              result.room?.title &&
+              (fromDiscord || result.room.title !== "새 게임 파티")
+            )
+              setRoomTitle(result.room.title);
+          }
+        } else {
+          const reserved = await reserveRoom();
+          if (!cancelled) setRoom(reserved.code);
+        }
+      } catch (caught) {
+        if (!cancelled)
+          setError(
+            caught instanceof Error ? caught.message : "파티를 준비하지 못했습니다.",
+          );
+      } finally {
+        if (!cancelled) setRoomInitialized(true);
+      }
+    };
+    void initializeRoom();
     const onFullscreen = () => setFullscreen(document.fullscreenElement === previewShell.current);
     document.addEventListener("fullscreenchange", onFullscreen);
     return () => {
+      cancelled = true;
       document.removeEventListener("fullscreenchange", onFullscreen);
       cleanupResources(false);
     };
@@ -529,11 +567,11 @@ export default function Studio() {
                   <div className="studio-controls">
                     <label>
                       방 제목
-                      <input autoFocus value={roomTitle} onChange={(event) => setRoomTitle(event.target.value.slice(0, 50))} placeholder="예: 금요일 저녁 게임 파티" maxLength={50} />
+                      <input autoFocus={!discordCreatedRoom} value={roomTitle} onChange={(event) => setRoomTitle(event.target.value.slice(0, 50))} placeholder="예: 금요일 저녁 게임 파티" maxLength={50} readOnly={discordCreatedRoom} aria-readonly={discordCreatedRoom} />
                     </label>
                     <label>
                       방 코드
-                      <input value={room} onChange={(event) => setRoom(event.target.value.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20))} onBeforeInput={preventInvalidRoomCodeInput} onKeyDown={preventInvalidRoomCodeKey} inputMode="text" pattern="[A-Za-z0-9-]+" maxLength={20} autoCapitalize="none" spellCheck={false} />
+                      <input value={room} readOnly aria-readonly="true" />
                     </label>
                     <button className="start-button" onClick={() => void start()} disabled={!room || !roomTitle.trim()}>
                       <DesktopIcon /> 화면 공유 시작
