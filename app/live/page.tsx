@@ -115,10 +115,15 @@ export default function PartyRoom() {
           return;
         }
         const result = (await response.json()) as {
-          room?: { title?: string };
+          room?: { title?: string; status?: "draft" | "live" };
         };
         setRoomAvailable(true);
         if (result.room?.title) setRoomTitle(result.room.title);
+        setStatus(
+          result.room?.status === "live"
+            ? "방송 화면에 연결하는 중"
+            : "호스트가 화면 공유를 준비하고 있어요",
+        );
       } catch {
         if (!cancelled) setRoomAvailable(false);
         return;
