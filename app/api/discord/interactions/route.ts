@@ -9,6 +9,7 @@ import {
   type MissionCard,
 } from "@/lib/discord-bot";
 import { requestOrigin } from "@/lib/request-origin";
+import { castMissionVote, type MissionVote } from "@/lib/mission-votes";
 
 type DiscordUser = {
   id: string;
@@ -440,67 +441,21 @@ export async function POST(request: NextRequest) {
     )
       return response("처리할 수 없는 버튼이에요.");
 
-    const [current] = await sql.query(
-      `select vote from mission_votes where mission_id = $1 and discord_user_id = $2`,
-      [missionId, user.id],
+    const result = await castMissionVote(
+      missionId,
+      user.id,
+      vote as MissionVote,
     );
-    const oldVote = current?.vote as "success" | "fail" | undefined;
-    if (oldVote !== vote) {
-      await sql.query(
-        `insert into mission_votes (mission_id, discord_user_id, vote)
-         values ($1, $2, $3)
-         on conflict (mission_id, discord_user_id)
-         do update set vote = excluded.vote, updated_at = now()`,
-        [missionId, user.id, vote],
-      );
-      const successDelta =
-        (vote === "success" ? 1 : 0) - (oldVote === "success" ? 1 : 0);
-      const failDelta =
-        (vote === "fail" ? 1 : 0) - (oldVote === "fail" ? 1 : 0);
-      await sql.query(
-        `update missions set
-           success = greatest(0, success + $2), fail = greatest(0, fail + $3),
-           status = case
-             when success + $2 >= 3 then 'success'
-             when fail + $3 >= 3 then 'fail'
-             else status end
-         where id = $1 and status = 'active'`,
-        [missionId, successDelta, failDelta],
-      );
-    }
-
-    await sql.query(
-      `insert into point_ledger (guild_id, discord_user_id, amount, reason, reference_key)
-       values ($1, $2, 5, 'mission_vote', $3)
-       on conflict (reference_key) do nothing`,
-      [guildId, user.id, `vote:${missionId}:${user.id}`],
-    );
-    const [mission] = await sql.query(
-      `select m.id, m.title, m.creator, m.creator_discord_id as "creatorDiscordId",
-              m.reward, m.status, m.success, m.fail, r.code as "roomCode"
-       from missions m join rooms r on r.id = m.room_id where m.id = $1`,
-      [missionId],
-    );
+    const mission = result.mission;
     if (!mission)
       return response("이미 종료되었거나 존재하지 않는 미션이에요.");
+    if (!result.accepted)
+      return response("이미 이 미션에 투표했습니다.");
     if (interaction.message?.id)
       await sql.query(
         `update missions set discord_message_id = $2, discord_channel_id = $3 where id = $1`,
         [missionId, interaction.message.id, channelId],
       );
-    if (mission.status === "success" && mission.creatorDiscordId) {
-      await sql.query(
-        `insert into point_ledger (guild_id, discord_user_id, amount, reason, reference_key)
-         values ($1, $2, $3, 'mission_success', $4)
-         on conflict (reference_key) do nothing`,
-        [
-          guildId,
-          mission.creatorDiscordId,
-          mission.reward,
-          `mission-reward:${missionId}`,
-        ],
-      );
-    }
     await publishRoomEvent(mission.roomCode, {
       type: "mission-updated",
       mission,

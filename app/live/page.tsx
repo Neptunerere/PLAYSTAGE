@@ -71,6 +71,8 @@ export default function PartyRoom() {
     [nickname, setNickname] = useState(""),
     [nicknameDraft, setNicknameDraft] = useState(""),
     [roomAvailable, setRoomAvailable] = useState<boolean | null>(null),
+    [discordConnected, setDiscordConnected] = useState(false),
+    [myVotes, setMyVotes] = useState<Record<string, "success" | "fail">>({}),
     [quality, setQuality] = useState("auto"),
     [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function PartyRoom() {
       .then((result: { user?: { displayName?: string } | null }) => {
         const displayName = result.user?.displayName?.trim().slice(0, 12);
         if (displayName) {
+          setDiscordConnected(true);
           setNicknameDraft(displayName);
           setNickname(displayName);
         }
@@ -119,6 +122,7 @@ export default function PartyRoom() {
         };
         setRoomAvailable(true);
         if (result.room?.title) setRoomTitle(result.room.title);
+        void refreshMyVotes(r);
         setStatus(
           result.room?.status === "live"
             ? "방송 화면에 연결하는 중"
@@ -183,10 +187,12 @@ export default function PartyRoom() {
           setMissions(m.missions);
         else if (m.type === "mission" && m.mission)
           setMissions((v) => [m.mission!, ...v]);
-        else if (m.type === "mission-updated" && m.mission)
+        else if (m.type === "mission-updated" && m.mission) {
           setMissions((v) =>
             v.map((x) => (x.id === m.mission!.id ? m.mission! : x)),
           );
+          void refreshMyVotes(r);
+        }
         else if (m.type === "overlay" && m.item)
           setOverlay((v) =>
             m.item!.kind === "clear"
@@ -217,6 +223,35 @@ export default function PartyRoom() {
   const send = (v: object) =>
     socket.current?.readyState === WebSocket.OPEN &&
     socket.current.send(JSON.stringify(v));
+  async function refreshMyVotes(roomCode = room) {
+    const response = await fetch(
+      `/api/missions/votes?room=${encodeURIComponent(roomCode)}`,
+      { cache: "no-store" },
+    ).catch(() => null);
+    if (!response?.ok) return;
+    const result = (await response.json()) as {
+      authenticated?: boolean;
+      votes?: Record<string, "success" | "fail">;
+    };
+    setDiscordConnected(Boolean(result.authenticated));
+    setMyVotes(result.votes || {});
+  }
+  async function voteMission(missionId: string, vote: "success" | "fail") {
+    if (!discordConnected) {
+      location.href = `/api/auth/discord?returnTo=${encodeURIComponent(`/live?room=${room}`)}`;
+      return;
+    }
+    const response = await fetch("/api/missions/votes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ missionId, vote }),
+    });
+    if (response.status === 401) {
+      location.href = `/api/auth/discord?returnTo=${encodeURIComponent(`/live?room=${room}`)}`;
+      return;
+    }
+    await refreshMyVotes(room);
+  }
   const submitChat = (e: FormEvent) => {
     e.preventDefault();
     if (chat.trim()) {
@@ -353,9 +388,6 @@ export default function PartyRoom() {
                 <h1>{roomTitle}</h1>
                 <p>친구들끼리 미션 걸고 플레이</p>
               </div>
-              <Link className="studio-link" href={`/studio?room=${room}`}>
-                호스트 화면
-              </Link>
             </div>
             <div className="active-mission-strip">
               <TargetIcon />
@@ -403,24 +435,16 @@ export default function PartyRoom() {
                       <h3>{m.title}</h3>
                       <div className="vote-buttons">
                         <button
-                          onClick={() =>
-                            send({
-                              type: "mission-vote",
-                              missionId: m.id,
-                              vote: "success",
-                            })
-                          }
+                          disabled={Boolean(myVotes[m.id])}
+                          title={myVotes[m.id] ? "이미 투표한 미션입니다" : undefined}
+                          onClick={() => void voteMission(m.id, "success")}
                         >
                           성공 {m.success}
                         </button>
                         <button
-                          onClick={() =>
-                            send({
-                              type: "mission-vote",
-                              missionId: m.id,
-                              vote: "fail",
-                            })
-                          }
+                          disabled={Boolean(myVotes[m.id])}
+                          title={myVotes[m.id] ? "이미 투표한 미션입니다" : undefined}
+                          onClick={() => void voteMission(m.id, "fail")}
                         >
                           실패 {m.fail}
                         </button>

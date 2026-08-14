@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "host_heartbeat_at" timestamp with time zone;

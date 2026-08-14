@@ -66,6 +66,7 @@ export default function Studio() {
     roomCreated = useRef(false),
     stopping = useRef(false),
     reconnectTimer = useRef<number | undefined>(undefined),
+    heartbeatTimer = useRef<number | undefined>(undefined),
     reconnectDelay = useRef(1000),
     peers = useRef(new Map<string, RTCPeerConnection>());
   const [room, setRoom] = useState(""),
@@ -179,6 +180,12 @@ export default function Studio() {
       }
 
       roomCreated.current = true;
+      heartbeatTimer.current = window.setInterval(() => {
+        void fetch(`/api/rooms/${encodeURIComponent(room)}`, {
+          method: "PATCH",
+          cache: "no-store",
+        });
+      }, 10_000);
 
       stream.current = s;
       if (preview.current) preview.current.srcObject = s;
@@ -193,6 +200,7 @@ export default function Studio() {
   function cleanupResources(updateState = true) {
     stopping.current = true;
     window.clearTimeout(reconnectTimer.current);
+    window.clearInterval(heartbeatTimer.current);
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
     socket.current?.close();

@@ -29,6 +29,13 @@
       "when": 1786693306394,
       "tag": "0003_pale_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786694564483,
+      "tag": "0004_freezing_mongoose",
+      "breakpoints": true
     }
   ]
 }

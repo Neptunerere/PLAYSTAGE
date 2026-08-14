@@ -26,10 +26,10 @@ export async function POST(request: Request) {
 
     const [room] = await getDb()
       .insert(rooms)
-      .values({ title, code, status: "live" })
+      .values({ title, code, status: "live", hostHeartbeatAt: new Date() })
       .onConflictDoUpdate({
         target: rooms.code,
-        set: { title, status: "live" },
+        set: { title, status: "live", hostHeartbeatAt: new Date() },
       })
       .returning();
 
