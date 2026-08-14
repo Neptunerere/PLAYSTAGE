@@ -31,8 +31,13 @@ function discordMissionPayload(mission) {
     embeds: [
       {
         title: `🎯 ${mission.title}`,
-        description: `${mission.status === "success" ? "✅ 성공 확정" : mission.status === "fail" ? "❌ 실패 확정" : "투표 진행 중"}\n제안자 **${mission.creator}** · 성공 시 **${mission.reward || 100}P**`,
-        color: mission.status === "success" ? 0x21d79f : mission.status === "fail" ? 0xff4967 : 0x5865f2,
+        description: `${mission.status === "success" ? "✅ 성공 확정" : mission.status === "fail" ? "❌ 실패 확정" : mission.status === "completed" ? "🏁 친구들의 동의로 종료" : "투표 진행 중"}\n제안자 **${mission.creator}** · 성공 시 **${mission.reward || 100}P**${mission.type === "time_attack" && mission.durationSeconds ? ` · ⏱️ ${Math.ceil(mission.durationSeconds / 60)}분 타임어택` : ""}`,
+        color:
+          mission.status === "success"
+            ? 0x21d79f
+            : mission.status === "fail"
+              ? 0xff4967
+              : 0x5865f2,
         fields: [
           { name: "✅ 성공", value: `${mission.success}표`, inline: true },
           { name: "❌ 실패", value: `${mission.fail}표`, inline: true },
@@ -44,9 +49,26 @@ function discordMissionPayload(mission) {
       {
         type: 1,
         components: [
-          { type: 2, style: 3, label: "성공", custom_id: `mission_vote:success:${mission.id}`, disabled: finished },
-          { type: 2, style: 4, label: "실패", custom_id: `mission_vote:fail:${mission.id}`, disabled: finished },
-          { type: 2, style: 5, label: "웹에서 보기", url: `${appOrigin}/live?room=${mission.roomCode}` },
+          {
+            type: 2,
+            style: 3,
+            label: "성공",
+            custom_id: `mission_vote:success:${mission.id}`,
+            disabled: finished,
+          },
+          {
+            type: 2,
+            style: 4,
+            label: "실패",
+            custom_id: `mission_vote:fail:${mission.id}`,
+            disabled: finished,
+          },
+          {
+            type: 2,
+            style: 5,
+            label: "웹에서 보기",
+            url: `${appOrigin}/live?room=${mission.roomCode}`,
+          },
         ],
       },
     ],
@@ -57,6 +79,7 @@ async function postMissionToDiscord(roomCode, missionId) {
   if (!sql || !process.env.DISCORD_BOT_TOKEN) return;
   const [mission] = await sql.query(
     `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            m.type, m.duration_seconds as "durationSeconds",
             r.code as "roomCode", rd.channel_id as "channelId"
        from missions m join rooms r on r.id = m.room_id
        join room_discord rd on rd.room_id = r.id
@@ -87,6 +110,7 @@ async function updateDiscordMission(missionId) {
   if (!sql || !process.env.DISCORD_BOT_TOKEN) return;
   const [mission] = await sql.query(
     `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            m.type, m.duration_seconds as "durationSeconds",
             m.discord_message_id as "messageId", m.discord_channel_id as "channelId",
             r.code as "roomCode" from missions m join rooms r on r.id = m.room_id
       where m.id = $1`,
@@ -139,7 +163,8 @@ function scheduleRoomClose(roomId) {
     hostDisconnectTimers.delete(roomId);
     const clients = rooms.get(roomId);
     const hostReconnected =
-      clients && [...clients.values()].some((client) => client.role === "broadcaster");
+      clients &&
+      [...clients.values()].some((client) => client.role === "broadcaster");
     if (hostReconnected) return;
 
     try {
@@ -152,7 +177,8 @@ function scheduleRoomClose(roomId) {
     if (clients) {
       broadcast(roomId, { type: "room-closed", reason: "host-disconnected" });
       setTimeout(() => {
-        for (const client of clients.values()) client.socket.close(1000, "room closed");
+        for (const client of clients.values())
+          client.socket.close(1000, "room closed");
       }, 100);
     }
     rooms.delete(roomId);
@@ -164,7 +190,12 @@ function scheduleRoomClose(roomId) {
 async function getRoomMissions(roomCode) {
   if (!sql) return [];
   return sql.query(
-    `select m.id, m.title, m.creator, m.status, m.success, m.fail
+    `select m.id, m.title, m.creator, m.creator_client_id as "creatorClientId",
+            m.type, m.duration_seconds as "durationSeconds", m.started_at as "startedAt",
+            m.ends_at as "endsAt", m.end_requested_at as "endRequestedAt",
+            m.end_required_count as "endRequiredCount", m.status, m.success, m.fail,
+            (select count(*)::int from mission_end_votes mev
+              where mev.mission_id = m.id and mev.approved_at is not null) as "endApprovalCount"
      from missions m
      inner join rooms r on r.id = m.room_id
      where r.code = $1 and m.status = 'active'
@@ -231,7 +262,10 @@ wss.on("connection", (socket, request, clientInfo) => {
 
     if (message.type === "missions-request" && role === "broadcaster") {
       try {
-        send(socket, { type: "missions-sync", missions: await getRoomMissions(roomId) });
+        send(socket, {
+          type: "missions-sync",
+          missions: await getRoomMissions(roomId),
+        });
       } catch (error) {
         console.error("Failed to load host missions", error);
       }
@@ -239,14 +273,26 @@ wss.on("connection", (socket, request, clientInfo) => {
     }
 
     if (message.type === "viewer-profile" && role === "viewer") {
-      const name = String(message.name || "친구").trim().slice(0, 24);
+      const name = String(message.name || "친구")
+        .trim()
+        .slice(0, 24);
+      const clientKey = String(message.clientKey || "")
+        .replace(/[^a-zA-Z0-9-]/g, "")
+        .slice(0, 64);
+      const client = clients.get(id);
+      if (clientKey && client) {
+        client.clientKey = clientKey;
+        client.name = name;
+      }
       broadcast(roomId, { type: "viewer-profile", from: id, name });
       return;
     }
 
     if (
       role === "broadcaster" &&
-      ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(message.type)
+      ["screen-changed", "broadcast-paused", "broadcast-resumed"].includes(
+        message.type,
+      )
     ) {
       broadcast(roomId, { type: message.type, from: id }, id);
       return;
@@ -299,11 +345,46 @@ wss.on("connection", (socket, request, clientInfo) => {
       if (!sql) return;
       const creator = String(message.name || "친구").slice(0, 24);
       try {
+        const naturalMinutes = Number(
+          title.match(/(\d{1,4})\s*분\s*(?:안|내)/)?.[1] || 0,
+        );
+        const missionType =
+          message.missionType === "time_attack" || naturalMinutes > 0
+            ? "time_attack"
+            : "normal";
+        const durationSeconds =
+          missionType === "time_attack"
+            ? Math.min(
+                86_400,
+                Math.max(
+                  60,
+                  Number(message.durationSeconds) || naturalMinutes * 60 || 600,
+                ),
+              )
+            : null;
+        const creatorClientId = String(message.clientKey || "")
+          .replace(/[^a-zA-Z0-9-]/g, "")
+          .slice(0, 64);
         const [mission] = await sql.query(
-          `insert into missions (room_id, title, creator)
-           select id, $2, $3 from rooms where code = $1
-           returning id, title, creator, status, success, fail`,
-          [roomId, title, creator],
+          `insert into missions
+             (room_id, title, creator, creator_client_id, type, duration_seconds, ends_at)
+           select id, $2, $3, $4, $5, $6,
+                  case when $6::int is null then null
+                       else now() + ($6 * interval '1 second') end
+             from rooms where code = $1
+           returning id, title, creator, creator_client_id as "creatorClientId", type,
+                     duration_seconds as "durationSeconds", started_at as "startedAt",
+                     ends_at as "endsAt", end_requested_at as "endRequestedAt",
+                     end_required_count as "endRequiredCount", 0 as "endApprovalCount",
+                     status, success, fail`,
+          [
+            roomId,
+            title,
+            creator,
+            creatorClientId || null,
+            missionType,
+            durationSeconds,
+          ],
         );
         if (mission) {
           broadcast(roomId, { type: "mission", mission });
@@ -314,6 +395,99 @@ wss.on("connection", (socket, request, clientInfo) => {
       } catch (error) {
         console.error("Failed to create mission", error);
         send(socket, { type: "mission-error" });
+      }
+      return;
+    }
+
+    if (message.type === "mission-end-request" && role === "viewer") {
+      if (!sql) return;
+      const missionId = String(message.missionId || "");
+      const clientKey = String(message.clientKey || "")
+        .replace(/[^a-zA-Z0-9-]/g, "")
+        .slice(0, 64);
+      const [owned] = await sql.query(
+        `select m.id from missions m join rooms r on r.id = m.room_id
+          where m.id = $1 and r.code = $2 and m.status = 'active'
+            and m.creator_client_id = $3 and m.end_requested_at is null`,
+        [missionId, roomId, clientKey],
+      );
+      if (!owned) return;
+      const eligible = [
+        ...new Map(
+          [...clients.values()]
+            .filter(
+              (client) =>
+                client.role === "viewer" &&
+                client.clientKey &&
+                client.clientKey !== clientKey,
+            )
+            .map((client) => [
+              client.clientKey,
+              { key: client.clientKey, name: client.name || "친구" },
+            ]),
+        ).values(),
+      ];
+      await sql.query(`delete from mission_end_votes where mission_id = $1`, [
+        missionId,
+      ]);
+      for (const voter of eligible)
+        await sql.query(
+          `insert into mission_end_votes
+             (mission_id, voter_client_id, voter_name)
+           values ($1, $2, $3) on conflict do nothing`,
+          [missionId, voter.key, voter.name],
+        );
+      const [mission] = await sql.query(
+        `update missions
+            set end_requested_at = now(), end_required_count = $2,
+                status = case when $2 = 0 then 'completed' else status end
+          where id = $1
+         returning id, title, creator, creator_client_id as "creatorClientId", type,
+                   duration_seconds as "durationSeconds", started_at as "startedAt",
+                   ends_at as "endsAt", end_requested_at as "endRequestedAt",
+                   end_required_count as "endRequiredCount", 0 as "endApprovalCount",
+                   status, success, fail`,
+        [missionId, eligible.length],
+      );
+      if (mission) {
+        broadcast(roomId, { type: "mission-updated", mission });
+        void updateDiscordMission(missionId).catch(console.error);
+      }
+      return;
+    }
+
+    if (message.type === "mission-end-approve" && role === "viewer") {
+      if (!sql) return;
+      const missionId = String(message.missionId || "");
+      const clientKey = String(message.clientKey || "")
+        .replace(/[^a-zA-Z0-9-]/g, "")
+        .slice(0, 64);
+      const [approved] = await sql.query(
+        `update mission_end_votes set approved_at = coalesce(approved_at, now())
+          where mission_id = $1 and voter_client_id = $2 returning mission_id`,
+        [missionId, clientKey],
+      );
+      if (!approved) return;
+      const [mission] = await sql.query(
+        `update missions m set status = case
+            when (select count(*) from mission_end_votes v
+                   where v.mission_id = m.id and v.approved_at is not null)
+                 >= m.end_required_count
+            then 'completed' else m.status end
+          where m.id = $1
+         returning m.id, m.title, m.creator,
+                   m.creator_client_id as "creatorClientId", m.type,
+                   m.duration_seconds as "durationSeconds", m.started_at as "startedAt",
+                   m.ends_at as "endsAt", m.end_requested_at as "endRequestedAt",
+                   m.end_required_count as "endRequiredCount",
+                   (select count(*)::int from mission_end_votes v
+                     where v.mission_id = m.id and v.approved_at is not null) as "endApprovalCount",
+                   m.status, m.success, m.fail`,
+        [missionId],
+      );
+      if (mission) {
+        broadcast(roomId, { type: "mission-updated", mission });
+        void updateDiscordMission(missionId).catch(console.error);
       }
       return;
     }

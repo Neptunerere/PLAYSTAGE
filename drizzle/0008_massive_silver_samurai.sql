@@ -1,0 +1,1 @@
+ALTER TABLE "mission_end_votes" ADD COLUMN "approved_at" timestamp with time zone;

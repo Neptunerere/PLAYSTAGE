@@ -10,6 +10,8 @@ export type MissionCard = {
   success: number;
   fail: number;
   roomCode: string;
+  type?: string;
+  durationSeconds?: number | null;
 };
 
 const api = "https://discord.com/api/v10";
@@ -34,12 +36,14 @@ export function missionMessage(mission: MissionCard, origin: string) {
       ? "✅ 성공 확정"
       : mission.status === "fail"
         ? "❌ 실패 확정"
-        : "투표 진행 중";
+        : mission.status === "completed"
+          ? "🏁 친구들의 동의로 종료"
+          : "투표 진행 중";
   return {
     embeds: [
       {
         title: `🎯 ${mission.title}`,
-        description: `${result}\n제안자 **${mission.creator}** · 성공 시 **${mission.reward}P**`,
+        description: `${result}\n제안자 **${mission.creator}** · 성공 시 **${mission.reward}P**${mission.type === "time_attack" && mission.durationSeconds ? ` · ⏱️ ${Math.ceil(mission.durationSeconds / 60)}분 타임어택` : ""}`,
         color:
           mission.status === "success"
             ? 0x21d79f
@@ -102,6 +106,7 @@ export async function postMissionToDiscord(
   const sql = neon(process.env.DATABASE_URL);
   const [row] = await sql.query(
     `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            m.type, m.duration_seconds as "durationSeconds",
             r.code as "roomCode", rd.channel_id as "channelId"
        from missions m
        join rooms r on r.id = m.room_id
@@ -130,6 +135,7 @@ export async function updateDiscordMissionMessage(
   const sql = neon(process.env.DATABASE_URL);
   const [row] = await sql.query(
     `select m.id, m.title, m.creator, m.reward, m.status, m.success, m.fail,
+            m.type, m.duration_seconds as "durationSeconds",
             m.discord_message_id as "messageId", m.discord_channel_id as "channelId",
             r.code as "roomCode"
        from missions m join rooms r on r.id = m.room_id where m.id = $1`,

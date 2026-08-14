@@ -22,6 +22,15 @@ type Mission = {
   id: string;
   title: string;
   creator: string;
+  creatorClientId?: string | null;
+  type: "normal" | "time_attack";
+  durationSeconds?: number | null;
+  startedAt?: string;
+  endsAt?: string | null;
+  endRequestedAt?: string | null;
+  endRequiredCount: number;
+  endApprovalCount: number;
+  status: string;
   success: number;
   fail: number;
 };
@@ -64,6 +73,10 @@ export default function PartyRoom() {
     [audio, setAudio] = useState(false),
     [chat, setChat] = useState(""),
     [missionTitle, setMissionTitle] = useState(""),
+    [missionType, setMissionType] = useState<"normal" | "time_attack">(
+      "normal",
+    ),
+    [missionMinutes, setMissionMinutes] = useState(10),
     [messages, setMessages] = useState<Chat[]>([]),
     [overlay, setOverlay] = useState<OverlayItem[]>([]),
     [missions, setMissions] = useState<Mission[]>([]),
@@ -75,7 +88,19 @@ export default function PartyRoom() {
     [myVotes, setMyVotes] = useState<Record<string, "success" | "fail">>({}),
     [quality, setQuality] = useState("auto"),
     [fullscreen, setFullscreen] = useState(false);
+  const [clientKey, setClientKey] = useState("");
+  const [now, setNow] = useState(0);
+
   useEffect(() => {
+    const saved = localStorage.getItem("playstage-client-key");
+    const key = saved || crypto.randomUUID();
+    localStorage.setItem("playstage-client-key", key);
+    setClientKey(key);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!clientKey) return;
     const updateFullscreen = () =>
       setFullscreen(document.fullscreenElement === playerContainer.current);
     document.addEventListener("fullscreenchange", updateFullscreen);
@@ -144,7 +169,11 @@ export default function PartyRoom() {
         currentWs.send(JSON.stringify({ type: "viewer-ready" }));
         if (nickname)
           currentWs.send(
-            JSON.stringify({ type: "viewer-profile", name: nickname }),
+            JSON.stringify({
+              type: "viewer-profile",
+              name: nickname,
+              clientKey,
+            }),
           );
       };
       currentWs.onclose = () => {
@@ -196,8 +225,7 @@ export default function PartyRoom() {
             v.map((x) => (x.id === m.mission!.id ? m.mission! : x)),
           );
           void refreshMyVotes(r);
-        }
-        else if (m.type === "overlay" && m.item)
+        } else if (m.type === "overlay" && m.item)
           setOverlay((v) =>
             m.item!.kind === "clear"
               ? []
@@ -229,13 +257,13 @@ export default function PartyRoom() {
       ws?.close();
       peer.current?.close();
     };
-  }, []);
+  }, [clientKey]);
   useEffect(() => {
     if (!nickname || socket.current?.readyState !== WebSocket.OPEN) return;
     socket.current.send(
-      JSON.stringify({ type: "viewer-profile", name: nickname }),
+      JSON.stringify({ type: "viewer-profile", name: nickname, clientKey }),
     );
-  }, [nickname]);
+  }, [nickname, clientKey]);
   const send = (v: object) =>
     socket.current?.readyState === WebSocket.OPEN &&
     socket.current.send(JSON.stringify(v));
@@ -278,10 +306,57 @@ export default function PartyRoom() {
   const addMission = (e: FormEvent) => {
     e.preventDefault();
     if (missionTitle.trim()) {
-      send({ type: "mission-create", name: nickname, title: missionTitle });
+      const naturalMinutes = Number(
+        missionTitle.match(/(\d{1,4})\s*분\s*(?:안|내)/)?.[1] || 0,
+      );
+      const effectiveType =
+        missionType === "time_attack" || naturalMinutes > 0
+          ? "time_attack"
+          : "normal";
+      const effectiveMinutes = naturalMinutes || missionMinutes;
+      send({
+        type: "mission-create",
+        name: nickname,
+        title: missionTitle,
+        clientKey,
+        missionType: effectiveType,
+        durationSeconds:
+          effectiveType === "time_attack" ? effectiveMinutes * 60 : null,
+      });
       setMissionTitle("");
     }
   };
+  const requestMissionEnd = (missionId: string) =>
+    send({ type: "mission-end-request", missionId, clientKey });
+  const approveMissionEnd = (missionId: string) =>
+    send({ type: "mission-end-approve", missionId, clientKey });
+  const remainingTime = (mission: Mission) => {
+    const naturalMinutes = Number(
+      mission.title.match(/(\d{1,4})\s*분\s*(?:안|내)/)?.[1] || 0,
+    );
+    const inferredEnd =
+      !mission.endsAt && naturalMinutes > 0 && mission.startedAt
+        ? new Date(mission.startedAt).getTime() + naturalMinutes * 60_000
+        : null;
+    const endTime = mission.endsAt
+      ? new Date(mission.endsAt).getTime()
+      : inferredEnd;
+    if (!endTime) return null;
+    if (!now) return "--:--";
+    const seconds = Math.max(0, Math.ceil((endTime - now) / 1000));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    return hours > 0
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+      : `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  };
+  const isTimeAttack = (mission: Mission) =>
+    mission.type === "time_attack" || remainingTime(mission) !== null;
+  const activeMissions = missions.filter(
+    (mission) => mission.status === "active",
+  );
+  const representativeMission = activeMissions[0];
   const toggleAudio = () => {
     if (video.current) {
       video.current.muted = audio;
@@ -409,10 +484,20 @@ export default function PartyRoom() {
             <div className="active-mission-strip">
               <TargetIcon />
               <div>
-                <span>진행 중인 대표 미션</span>
-                <b>{missions[0]?.title || "아직 등록된 미션이 없어요"}</b>
+                <span>
+                  진행 중인 대표 미션
+                  {activeMissions.length > 1 &&
+                    ` · 다음 미션 ${activeMissions.length - 1}개 대기`}
+                </span>
+                <b>
+                  {representativeMission?.title || "아직 등록된 미션이 없어요"}
+                </b>
               </div>
-              {missions.length > 0 && <ClockIcon />}
+              {representativeMission && isTimeAttack(representativeMission) && (
+                <strong className="representative-countdown">
+                  <ClockIcon /> {remainingTime(representativeMission)}
+                </strong>
+              )}
             </div>
           </section>
           <aside className="sidebar">
@@ -428,11 +513,51 @@ export default function PartyRoom() {
               </Tabs.List>
               <Tabs.Content value="mission" className="party-tab-content">
                 <form className="mission-form" onSubmit={addMission}>
+                  <div className="mission-type-switch" aria-label="미션 방식">
+                    <button
+                      type="button"
+                      className={missionType === "normal" ? "active" : ""}
+                      onClick={() => setMissionType("normal")}
+                    >
+                      일반
+                    </button>
+                    <button
+                      type="button"
+                      className={missionType === "time_attack" ? "active" : ""}
+                      onClick={() => setMissionType("time_attack")}
+                    >
+                      <ClockIcon /> 타임어택
+                    </button>
+                  </div>
                   <input
                     value={missionTitle}
                     onChange={(e) => setMissionTitle(e.target.value)}
-                    placeholder="친구에게 미션 걸기"
+                    placeholder={
+                      missionType === "time_attack"
+                        ? "예: 10분 안에 보스 클리어"
+                        : "친구에게 미션 걸기"
+                    }
                   />
+                  {missionType === "time_attack" && (
+                    <label className="mission-duration">
+                      제한시간
+                      <input
+                        type="number"
+                        min="1"
+                        max="1440"
+                        value={missionMinutes}
+                        onChange={(event) =>
+                          setMissionMinutes(
+                            Math.min(
+                              1440,
+                              Math.max(1, Number(event.target.value) || 1),
+                            ),
+                          )
+                        }
+                      />
+                      분
+                    </label>
+                  )}
                   <button disabled={!missionTitle.trim()}>
                     <PlusIcon /> 등록
                   </button>
@@ -444,23 +569,79 @@ export default function PartyRoom() {
                     </p>
                   )}
                   {missions.map((m) => (
-                    <article className="mission-card" key={m.id}>
+                    <article
+                      className={`mission-card ${m.status !== "active" ? "ended" : ""}`}
+                      key={m.id}
+                    >
                       <div>
-                        <span>진행 중</span>
+                        <span>
+                          {m.status !== "active"
+                            ? "종료됨"
+                            : isTimeAttack(m)
+                              ? "타임어택"
+                              : "진행 중"}
+                        </span>
                         <small>제안자 · {m.creator}</small>
                       </div>
                       <h3>{m.title}</h3>
+                      {isTimeAttack(m) && (
+                        <div
+                          className={`mission-countdown ${remainingTime(m) === "00:00" ? "expired" : ""}`}
+                        >
+                          <ClockIcon />
+                          <strong>{remainingTime(m)}</strong>
+                          <span>
+                            {remainingTime(m) === "00:00"
+                              ? "시간 종료"
+                              : "남음"}
+                          </span>
+                        </div>
+                      )}
+                      {m.status === "active" && m.endRequestedAt ? (
+                        <div className="mission-end-consensus">
+                          <p>
+                            종료 동의 {m.endApprovalCount}/{m.endRequiredCount}
+                          </p>
+                          {m.creatorClientId !== clientKey && (
+                            <button
+                              type="button"
+                              onClick={() => approveMissionEnd(m.id)}
+                            >
+                              종료에 동의
+                            </button>
+                          )}
+                        </div>
+                      ) : m.status === "active" &&
+                        m.creatorClientId === clientKey ? (
+                        <button
+                          type="button"
+                          className="mission-end-request"
+                          onClick={() => requestMissionEnd(m.id)}
+                        >
+                          미션 종료 요청
+                        </button>
+                      ) : null}
                       <div className="vote-buttons">
                         <button
-                          disabled={Boolean(myVotes[m.id])}
-                          title={myVotes[m.id] ? "이미 투표한 미션입니다" : undefined}
+                          type="button"
+                          disabled={
+                            m.status !== "active" || Boolean(myVotes[m.id])
+                          }
+                          title={
+                            myVotes[m.id] ? "이미 투표한 미션입니다" : undefined
+                          }
                           onClick={() => void voteMission(m.id, "success")}
                         >
                           성공 {m.success}
                         </button>
                         <button
-                          disabled={Boolean(myVotes[m.id])}
-                          title={myVotes[m.id] ? "이미 투표한 미션입니다" : undefined}
+                          type="button"
+                          disabled={
+                            m.status !== "active" || Boolean(myVotes[m.id])
+                          }
+                          title={
+                            myVotes[m.id] ? "이미 투표한 미션입니다" : undefined
+                          }
                           onClick={() => void voteMission(m.id, "fail")}
                         >
                           실패 {m.fail}

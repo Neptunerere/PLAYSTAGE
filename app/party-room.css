@@ -200,6 +200,21 @@
   align-items: center;
   gap: 12px;
 }
+.representative-countdown {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #21d7cf;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.representative-countdown svg {
+  width: 22px;
+  height: 22px;
+}
 .active-mission-strip > svg {
   width: 24px;
   height: 24px;
@@ -285,9 +300,40 @@
 }
 .mission-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 12px;
   border-bottom: 1px solid #30353c;
+}
+.mission-type-switch {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.mission-form .mission-type-switch button {
+  min-height: 32px;
+  justify-content: center;
+  border: 1px solid #343b45;
+  background: #181c22;
+  color: #8f98a6;
+}
+.mission-form .mission-type-switch button.active {
+  border-color: #4d7cff;
+  background: #263b73;
+  color: #fff;
+}
+.mission-duration {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9da6b4;
+  font-size: 10px;
+}
+.mission-form .mission-duration input {
+  flex: 0 0 74px;
+  padding: 7px 9px;
 }
 .mission-form input {
   min-width: 0;
@@ -354,6 +400,63 @@
 .mission-card h3 {
   font-size: 12px;
   margin: 13px 0;
+}
+.mission-card.ended {
+  opacity: 0.62;
+}
+.mission-countdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid #3b4d6d;
+  border-radius: 7px;
+  background: #172236;
+  color: #8eafff;
+}
+.mission-countdown strong {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+.mission-countdown span {
+  margin-left: auto;
+  font-size: 9px;
+}
+.mission-countdown.expired {
+  border-color: #71404b;
+  background: #321c23;
+  color: #ff718d;
+}
+.mission-end-request,
+.mission-end-consensus button {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #49515e;
+  border-radius: 6px;
+  background: #262b33;
+  color: #d2d7df;
+  font-size: 10px;
+  cursor: pointer;
+}
+.mission-end-request:hover,
+.mission-end-consensus button:hover {
+  border-color: #7b91c2;
+  background: #2e3541;
+  color: #fff;
+}
+.mission-end-consensus {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #665b35;
+  border-radius: 7px;
+  background: #2c281a;
+}
+.mission-end-consensus p {
+  margin: 0 0 8px;
+  color: #f3cf69;
+  font-size: 10px;
 }
 .mission-timer {
   display: flex;
@@ -634,6 +737,9 @@
   }
   .active-mission-strip > span {
     font-size: 12px;
+  }
+  .representative-countdown {
+    font-size: 15px;
   }
   .party-room .stream-title {
     align-items: flex-start;

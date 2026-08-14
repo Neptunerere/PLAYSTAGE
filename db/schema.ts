@@ -17,9 +17,7 @@ export const rooms = pgTable(
     title: varchar("title", { length: 50 }).notNull(),
     code: varchar("code", { length: 20 }).notNull(),
     status: varchar("status", { length: 20 }).default("draft").notNull(),
-    createdVia: varchar("created_via", { length: 20 })
-      .default("web")
-      .notNull(),
+    createdVia: varchar("created_via", { length: 20 }).default("web").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -38,7 +36,16 @@ export const missions = pgTable("missions", {
     .references(() => rooms.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 80 }).notNull(),
   creator: varchar("creator", { length: 24 }).notNull(),
+  creatorClientId: varchar("creator_client_id", { length: 64 }),
   creatorDiscordId: varchar("creator_discord_id", { length: 24 }),
+  type: varchar("type", { length: 20 }).default("normal").notNull(),
+  durationSeconds: integer("duration_seconds"),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  endRequestedAt: timestamp("end_requested_at", { withTimezone: true }),
+  endRequiredCount: integer("end_required_count").default(0).notNull(),
   reward: integer("reward").default(100).notNull(),
   discordMessageId: varchar("discord_message_id", { length: 24 }),
   discordChannelId: varchar("discord_channel_id", { length: 24 }),
@@ -52,6 +59,22 @@ export const missions = pgTable("missions", {
 
 export type Mission = typeof missions.$inferSelect;
 export type NewMission = typeof missions.$inferInsert;
+
+export const missionEndVotes = pgTable(
+  "mission_end_votes",
+  {
+    missionId: uuid("mission_id")
+      .notNull()
+      .references(() => missions.id, { onDelete: "cascade" }),
+    voterClientId: varchar("voter_client_id", { length: 64 }).notNull(),
+    voterName: varchar("voter_name", { length: 24 }).notNull(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.missionId, table.voterClientId] })],
+);
 
 export const discordGuilds = pgTable("discord_guilds", {
   guildId: varchar("guild_id", { length: 24 }).primaryKey(),
