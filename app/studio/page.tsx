@@ -29,6 +29,11 @@ type Mission = {
   title: string;
   creator: string;
   status: string;
+  type?: "normal" | "time_attack";
+  endsAt?: string | null;
+  endRequestedAt?: string | null;
+  endRequiredCount?: number;
+  endApprovalCount?: number;
   success: number;
   fail: number;
 };
@@ -567,9 +572,6 @@ export default function Studio() {
             >
               <Link2Icon /> 시청 링크 복사
             </button>
-            <Link href={`/live?room=${encodeURIComponent(room)}`}>
-              시청 화면 열기 →
-            </Link>
           </div>
         </header>
 
@@ -924,12 +926,21 @@ export default function Studio() {
                         <div>
                           <span>
                             {mission.status === "active"
-                              ? "진행 중"
-                              : "결과 확정"}
+                              ? mission.type === "time_attack"
+                                ? "타임어택"
+                                : "진행 중"
+                              : "종료됨"}
                           </span>
                           <small>제안자 · {mission.creator}</small>
                         </div>
                         <b>{mission.title}</b>
+                        {mission.endRequestedAt &&
+                          mission.status === "active" && (
+                            <small>
+                              종료 동의 {mission.endApprovalCount || 0}/
+                              {mission.endRequiredCount || 0}
+                            </small>
+                          )}
                         <p>
                           <em>성공 {mission.success}</em>
                           <em>실패 {mission.fail}</em>

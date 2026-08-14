@@ -7,7 +7,8 @@ export async function castMissionVote(
   discordUserId: string,
   vote: MissionVote,
 ) {
-  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not configured");
+  if (!process.env.DATABASE_URL)
+    throw new Error("DATABASE_URL is not configured");
   const sql = neon(process.env.DATABASE_URL);
 
   const [inserted] = await sql.query(
@@ -21,12 +22,12 @@ export async function castMissionVote(
   const [mission] = await sql.query(
     inserted
       ? `update missions m set
-           success = success + case when $2 = 'success' then 1 else 0 end,
-           fail = fail + case when $2 = 'fail' then 1 else 0 end,
+           success = m.success + case when $2 = 'success' then 1 else 0 end,
+           fail = m.fail + case when $2 = 'fail' then 1 else 0 end,
            status = case
-             when success + case when $2 = 'success' then 1 else 0 end >= 3 then 'success'
-             when fail + case when $2 = 'fail' then 1 else 0 end >= 3 then 'fail'
-             else status end
+             when m.success + case when $2 = 'success' then 1 else 0 end >= 3 then 'success'
+             when m.fail + case when $2 = 'fail' then 1 else 0 end >= 3 then 'fail'
+             else m.status end
          from rooms r
          left join room_discord rd on rd.room_id = r.id
          where m.id = $1 and m.room_id = r.id
