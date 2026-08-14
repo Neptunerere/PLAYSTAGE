@@ -17,6 +17,9 @@ export const rooms = pgTable(
     title: varchar("title", { length: 50 }).notNull(),
     code: varchar("code", { length: 20 }).notNull(),
     status: varchar("status", { length: 20 }).default("draft").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     hostHeartbeatAt: timestamp("host_heartbeat_at", { withTimezone: true }),
   },
   (table) => [uniqueIndex("rooms_code_unique").on(table.code)],
