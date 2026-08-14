@@ -5,6 +5,31 @@ import { requestOrigin } from "@/lib/request-origin";
 
 const roomCodePattern = /^[a-zA-Z0-9-]{1,20}$/;
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ code: string }> },
+) {
+  const { code } = await params;
+  if (!roomCodePattern.test(code) || !process.env.DATABASE_URL)
+    return NextResponse.json({ connected: false });
+
+  const sql = neon(process.env.DATABASE_URL);
+  const [connection] = await sql.query(
+    `select dc.name as "channelName"
+       from rooms r
+       join room_discord rd on rd.room_id = r.id
+       join discord_channels dc on dc.channel_id = rd.channel_id
+      where r.code = $1
+      limit 1`,
+    [code],
+  );
+
+  return NextResponse.json({
+    connected: Boolean(connection),
+    channelName: connection?.channelName || null,
+  });
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> },

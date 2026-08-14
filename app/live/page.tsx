@@ -323,7 +323,8 @@ export default function PartyRoom() {
             </button>
           </div>
           <div className="profile">
-            <PersonIcon /> {nickname || "닉네임 설정 중"}
+            <PersonIcon />
+            <span>{nickname || "닉네임 설정 중"}</span>
           </div>
         </header>
         <div className="layout realtime-layout">

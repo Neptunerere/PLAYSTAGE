@@ -93,6 +93,8 @@ export default function Studio() {
   const stopping = useRef(false);
   const reconnectTimer = useRef<number | undefined>(undefined);
   const heartbeatTimer = useRef<number | undefined>(undefined);
+  const discordLoadingTimer = useRef<number | undefined>(undefined);
+  const discordLoadingShownAt = useRef<number | null>(null);
   const reconnectDelay = useRef(1000);
   const peers = useRef(new Map<string, RTCPeerConnection>());
 
@@ -110,11 +112,18 @@ export default function Studio() {
   const [messages, setMessages] = useState<Chat[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [participants, setParticipants] = useState<Record<string, string>>({});
+  const [discordChecking, setDiscordChecking] = useState(true);
+  const [discordConnected, setDiscordConnected] = useState(false);
+  const [discordChannelName, setDiscordChannelName] = useState("");
+  const [discordGateDismissed, setDiscordGateDismissed] = useState(false);
+  const [roomInitialized, setRoomInitialized] = useState(false);
+  const [showDiscordLoading, setShowDiscordLoading] = useState(false);
 
   useEffect(() => {
     const raw = new URLSearchParams(location.search).get("room");
     const requested = raw?.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20);
     setRoom(requested || createRoomCode());
+    setRoomInitialized(true);
     const onFullscreen = () => setFullscreen(document.fullscreenElement === previewShell.current);
     document.addEventListener("fullscreenchange", onFullscreen);
     return () => {
@@ -122,6 +131,62 @@ export default function Studio() {
       cleanupResources(false);
     };
   }, []);
+
+  async function checkDiscordConnection(roomCode = room, announce = false) {
+    if (!roomCode) return false;
+    const response = await fetch(
+      `/api/rooms/${encodeURIComponent(roomCode)}/discord`,
+      { cache: "no-store" },
+    ).catch(() => null);
+    const result = response
+      ? ((await response.json().catch(() => null)) as {
+          connected?: boolean;
+          channelName?: string | null;
+        } | null)
+      : null;
+    window.clearTimeout(discordLoadingTimer.current);
+    if (discordLoadingShownAt.current) {
+      const remaining = 600 - (Date.now() - discordLoadingShownAt.current);
+      if (remaining > 0)
+        await new Promise((resolve) => window.setTimeout(resolve, remaining));
+    }
+    const connected = Boolean(result?.connected);
+    setDiscordConnected(connected);
+    setDiscordChannelName(result?.channelName || "");
+    setDiscordChecking(false);
+    setShowDiscordLoading(false);
+    discordLoadingShownAt.current = null;
+    if (connected && announce)
+      setNotice(
+        result?.channelName
+          ? `#${result.channelName} 채널 연결을 확인했습니다.`
+          : "Discord 채널 연결을 확인했습니다.",
+      );
+    else if (!connected && announce)
+      setNotice("아직 연결되지 않았어요. Discord 채널에서 /연결 명령을 실행해 주세요.");
+    return connected;
+  }
+
+  useEffect(() => {
+    if (!room) return;
+    setDiscordChecking(true);
+    setShowDiscordLoading(false);
+    discordLoadingShownAt.current = null;
+    window.clearTimeout(discordLoadingTimer.current);
+    discordLoadingTimer.current = window.setTimeout(() => {
+      discordLoadingShownAt.current = Date.now();
+      setShowDiscordLoading(true);
+    }, 400);
+    void checkDiscordConnection(room);
+    const timer = window.setInterval(() => {
+      if (!discordConnected && !discordGateDismissed)
+        void checkDiscordConnection(room);
+    }, 3000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(discordLoadingTimer.current);
+    };
+  }, [room, discordConnected, discordGateDismissed]);
 
   function send(payload: object) {
     if (socket.current?.readyState === WebSocket.OPEN)
@@ -381,6 +446,13 @@ export default function Studio() {
   const inviteUrl = typeof window === "undefined" ? "" : `${location.origin}/live?room=${room}`;
   const videoTrack = stream.current?.getVideoTracks()[0];
   const settings = videoTrack?.getSettings();
+  const showDiscordGate =
+    roomInitialized &&
+    Boolean(room) &&
+    !settingsDisabled &&
+    !discordConnected &&
+    !discordGateDismissed;
+  const holdStudioForDiscord = !roomInitialized || showDiscordGate;
 
   return (
     <Toast.Provider swipeDirection="down" duration={2600}>
@@ -398,17 +470,56 @@ export default function Studio() {
           </div>
         </header>
 
+        {holdStudioForDiscord ? (
+          <section className={`discord-connect-gate ${(!roomInitialized || discordChecking) && !showDiscordLoading ? "is-silent" : ""}`}>
+            {!roomInitialized || discordChecking ? (
+              showDiscordLoading ? <div className="discord-connect-loading" role="status" aria-live="polite">
+                <span><DiscordLogoIcon /></span>
+                <b>파티 연결 상태를 확인하고 있어요</b>
+                <p>잠시만 기다려 주세요.</p>
+              </div> : <div className="discord-connect-placeholder" aria-hidden="true" />
+            ) : (
+            <>
+            <div className="discord-connect-hero">
+              <span className="discord-connect-icon"><DiscordLogoIcon /></span>
+              <span>DISCORD PARTY</span>
+            </div>
+            <h1>친구들이 있는 Discord와<br />파티를 먼저 연결해 보세요</h1>
+            <p>
+              미션 제안과 성공·실패 투표가 Discord에도 실시간으로 전달돼요.<br />
+              이미 봇을 설치하고 방을 연결했다면 바로 확인할 수 있습니다.
+            </p>
+            <div className="discord-connect-code">
+              <span>현재 방 코드</span>
+              <b>{room}</b>
+              <button type="button" onClick={() => void copy(room, "방 코드를 복사했습니다.")}><CopyIcon /> 복사</button>
+            </div>
+            <div className="discord-connect-steps">
+              <article><span>01</span><div><b>봇 설치</b><p>친구들이 모인 Discord 서버에 PLAYSTAGE 봇을 추가해요.</p></div></article>
+              <article><span>02</span><div><b>/연결 실행</b><p>원하는 채널에서 <code>/연결</code> 후 위 방 코드를 입력해요.</p></div></article>
+              <article><span>03</span><div><b>연결 확인</b><p>확인되면 방송 설정 화면으로 자동 이동해요.</p></div></article>
+            </div>
+            <div className="discord-auto-check"><CheckCircledIcon /><span><b>연결 대기 중</b> Discord 채널 연결 여부를 자동으로 확인하고 있어요.</span></div>
+            <div className="discord-connect-actions">
+              <a href="/api/discord/install" target="_blank" rel="noreferrer"><DiscordLogoIcon /> Discord 봇 설치하기</a>
+              <button type="button" className="skip" onClick={() => setDiscordGateDismissed(true)}>Discord 없이 방송하기</button>
+            </div>
+            <small>이미 봇이 설치되어 있다면 Discord 채널에서 <code>/연결</code>만 실행해 주세요.</small>
+            </>
+            )}
+          </section>
+        ) : (
         <div className="studio-shell">
           <section className="studio-console">
             {!settingsDisabled ? (
               <div className="studio-heading">
-                <div className="discord-bot-guide">
+                <div className={`discord-bot-guide ${discordConnected ? "connected" : ""}`}>
                   <div className="discord-channel-icon"><DiscordLogoIcon /></div>
                   <div>
-                    <b>Discord 채널과 함께 쓰기</b>
-                    <p>봇을 설치하고 /party를 실행하면 미션·투표·포인트가 실시간으로 연결돼요.</p>
+                    <b>{discordConnected ? "Discord 채널 연결됨" : "Discord 채널과 함께 쓰기"}</b>
+                    <p>{discordConnected ? `${discordChannelName ? `#${discordChannelName}` : "Discord"}에서 미션·투표 알림을 받을 수 있어요.` : "봇을 설치하고 /연결을 실행하면 미션·투표·포인트가 실시간으로 연결돼요."}</p>
                   </div>
-                  <a href="/api/discord/install">봇 설치</a>
+                  {discordConnected ? <button type="button" onClick={() => void notifyDiscord()}>연결 확인</button> : <a href="/api/discord/install">봇 설치</a>}
                 </div>
                 <div className="studio-heading-copy">
                   <span>방송 설정</span>
@@ -498,6 +609,7 @@ export default function Studio() {
             </Tabs.Root>
           </aside>
         </div>
+        )}
       </main>
 
       <Toast.Root className="room-copy-toast" open={Boolean(notice)} onOpenChange={(open) => !open && setNotice("")}>
