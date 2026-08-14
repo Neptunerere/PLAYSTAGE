@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/icon.png" width="72" alt="PLAYSTAGE 로고" />
+  <img src="app/icon.png" width="72" alt="PLAYSTAGE 로고" />
   <h1>PLAYSTAGE</h1>
   <p><strong>같이 보고, 미션 걸고, 더 재밌게 플레이.</strong></p>
   <p>
