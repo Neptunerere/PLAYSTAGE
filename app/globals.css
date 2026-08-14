@@ -398,8 +398,7 @@ body[data-scroll-locked] {
   border: 1px solid #343a48;
   border-radius: 18px;
   background:
-    radial-gradient(circle at 50% 0, #5865f222, transparent 42%),
-    #191c22;
+    radial-gradient(circle at 50% 0, #5865f222, transparent 42%), #191c22;
   color: #f5f7fb;
   text-align: center;
   box-shadow: 0 30px 80px #05060a55;
@@ -483,8 +482,12 @@ body[data-scroll-locked] {
   font-size: 12px;
 }
 @keyframes discord-loading-pulse {
-  from { opacity: 0.72; }
-  to { opacity: 1; }
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .discord-connect-code {
   margin: 26px auto 22px;
@@ -584,7 +587,9 @@ body[data-scroll-locked] {
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
-  transition: transform 150ms ease, background-color 150ms ease;
+  transition:
+    transform 150ms ease,
+    background-color 150ms ease;
 }
 .discord-connect-actions a {
   background: #5865f2;
@@ -1028,6 +1033,238 @@ body[data-scroll-locked] {
   width: min(1460px, calc(100% - 40px));
   grid-template-columns: minmax(0, 1fr) 360px;
 }
+
+@media (min-width: 901px) {
+  .discord-connect-gate {
+    width: min(900px, calc(100% - 56px));
+    min-height: 580px;
+    margin: clamp(52px, 7vh, 78px) auto;
+    padding: 58px 64px 50px;
+  }
+
+  .discord-connect-hero {
+    font-size: 12px;
+  }
+
+  .discord-connect-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .discord-connect-gate h1 {
+    margin-top: 24px;
+    font-size: clamp(36px, 3vw, 46px);
+  }
+
+  .discord-connect-gate > p {
+    font-size: 16px;
+  }
+
+  .discord-connect-code {
+    min-height: 66px;
+    margin: 30px auto 24px;
+    padding: 10px 12px 10px 18px;
+  }
+
+  .discord-connect-code span {
+    font-size: 13px;
+  }
+
+  .discord-connect-code b {
+    font-size: 18px;
+  }
+
+  .discord-connect-code button {
+    min-height: 42px;
+    padding: 0 15px;
+    font-size: 12px;
+  }
+
+  .discord-connect-steps {
+    gap: 14px;
+  }
+
+  .discord-connect-steps article {
+    min-height: 112px;
+    padding: 20px;
+  }
+
+  .discord-connect-steps b {
+    font-size: 14px;
+  }
+
+  .discord-connect-steps p {
+    font-size: 12px;
+  }
+
+  .discord-connect-actions a,
+  .discord-connect-actions button {
+    min-height: 48px;
+    padding: 0 19px;
+    font-size: 13px;
+  }
+
+  .studio-page > header {
+    height: 70px;
+    min-height: 70px;
+    padding: 0 34px;
+  }
+
+  .studio-page > header a:last-child {
+    font-size: 14px;
+  }
+
+  .studio-page > header .discord-install-link {
+    min-height: 38px;
+    padding: 0 13px;
+    font-size: 12px;
+  }
+
+  .studio-shell {
+    width: min(1480px, calc(100% - 56px));
+    margin: 42px auto;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 22px;
+  }
+
+  .studio-page.is-live .studio-shell {
+    width: min(1780px, calc(100% - 56px));
+    grid-template-columns: minmax(0, 1fr) 420px;
+  }
+
+  .studio-shell > section,
+  .studio-chat {
+    border-radius: 14px;
+  }
+
+  .studio-heading {
+    padding: 28px 30px;
+    gap: 20px;
+  }
+
+  .discord-channel-status,
+  .discord-bot-guide {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 15px 17px;
+  }
+
+  .discord-channel-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .discord-channel-status b,
+  .discord-bot-guide b {
+    font-size: 14px;
+  }
+
+  .discord-channel-status p,
+  .discord-bot-guide p {
+    font-size: 12px;
+  }
+
+  .discord-channel-status > a,
+  .discord-channel-status > button,
+  .discord-bot-guide > a,
+  .discord-bot-guide > button {
+    min-height: 40px;
+    padding: 0 15px;
+    font-size: 12px;
+  }
+
+  .studio-heading-copy span {
+    font-size: 14px;
+  }
+
+  .studio-heading-copy p {
+    margin-top: 7px;
+    font-size: 15px;
+  }
+
+  .studio-heading-row {
+    gap: 16px;
+  }
+
+  .studio-controls {
+    gap: 14px;
+  }
+
+  .studio-controls label {
+    font-size: 13px;
+  }
+
+  .studio-controls input {
+    min-height: 48px;
+    margin-top: 9px;
+    padding: 13px 14px;
+    font-size: 14px;
+  }
+
+  .studio-controls button {
+    min-height: 48px;
+    padding: 0 19px;
+    font-size: 13px;
+  }
+
+  .studio-live {
+    padding: 9px 13px;
+    font-size: 12px;
+  }
+
+  .studio-preview {
+    margin: 0 28px 28px;
+    border-radius: 11px;
+  }
+
+  .preview-empty {
+    gap: 12px;
+  }
+
+  .preview-empty svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .preview-empty b {
+    font-size: 17px;
+  }
+
+  .preview-empty span {
+    font-size: 13px;
+  }
+
+  .studio-session-bar {
+    min-height: 84px;
+    padding: 16px 28px;
+  }
+
+  .studio-session-bar b {
+    font-size: 18px;
+  }
+
+  .studio-session-bar small,
+  .studio-health span {
+    font-size: 11px;
+  }
+
+  .studio-tab-list {
+    min-height: 62px;
+  }
+
+  .studio-tab-list button {
+    font-size: 12px;
+  }
+
+  .studio-tab-list button span {
+    font-size: 10px;
+  }
+
+  .studio-empty,
+  .studio-chat article {
+    font-size: 13px;
+  }
+}
 .studio-console {
   min-width: 0;
 }
@@ -1153,7 +1390,9 @@ body[data-scroll-locked] {
   box-shadow: 0 15px 38px #000a;
   opacity: 0;
   transform: translate(-50%, 9px);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
   backdrop-filter: blur(14px);
 }
 .studio-preview:hover .studio-stage-toolbar,
@@ -1174,7 +1413,10 @@ body[data-scroll-locked] {
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
 }
 .studio-stage-toolbar button:hover,
 .studio-stage-toolbar button.active {
@@ -1203,7 +1445,10 @@ body[data-scroll-locked] {
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
-  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
 }
 .studio-invite-actions button:hover {
   border-color: #5268ca;
@@ -1338,6 +1583,39 @@ body[data-scroll-locked] {
   border-radius: 50%;
   background: #22d4b8;
   box-shadow: 0 0 8px #22d4b8;
+}
+
+@media (min-width: 901px) {
+  .studio-session-bar {
+    min-height: 84px;
+    padding: 16px 28px;
+  }
+
+  .studio-session-bar b {
+    font-size: 18px;
+  }
+
+  .studio-session-bar small,
+  .studio-health span {
+    font-size: 11px;
+  }
+
+  .studio-tab-list {
+    min-height: 62px;
+  }
+
+  .studio-tab-list button {
+    font-size: 12px;
+  }
+
+  .studio-tab-list button span {
+    font-size: 10px;
+  }
+
+  .studio-empty,
+  .studio-chat article {
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 900px) {

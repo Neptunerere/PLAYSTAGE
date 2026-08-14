@@ -21,7 +21,7 @@ select {
 }
 
 .party-hero-copy > p {
-  font-size: 18px;
+  font-size: clamp(17px, 1.15vw, 20px);
 }
 
 .private-note,

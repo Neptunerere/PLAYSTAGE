@@ -10,7 +10,14 @@ import {
 } from "@radix-ui/react-icons";
 import { Dialog } from "radix-ui";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 const missionIdeas = [
   {
@@ -57,75 +64,95 @@ function preventInvalidRoomCodeInput(event: FormEvent<HTMLInputElement>) {
 
 export default function PartyHome() {
   const router = useRouter();
+  const pageRef = useRef<HTMLElement>(null);
   const [roomCode, setRoomCode] = useState("");
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinPending, setJoinPending] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [activeSection, setActiveSection] = useState("");
 
-  useEffect(() => {
-    const howSection = document.getElementById("how");
-    const missionsSection = document.getElementById("missions");
-    if (!howSection || !missionsSection) return;
+  useLayoutEffect(() => {
+    const scrollRoot = pageRef.current;
+    if (!scrollRoot) return;
 
-    let frameId = 0;
+    const previousRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
 
-    const updateActiveSection = () => {
-      frameId = 0;
-      const viewportFocus =
-        window.scrollY + 64 + (window.innerHeight - 64) * 0.5;
-      const howTop = howSection.offsetTop;
-      const missionsTop = missionsSection.offsetTop;
-      const howCenter = howTop + howSection.offsetHeight * 0.5;
-      const missionsCenter = missionsTop + missionsSection.offsetHeight * 0.5;
-      const sectionBoundary = (howCenter + missionsCenter) * 0.5;
-      const reachedPageBottom =
-        window.scrollY + window.innerHeight >=
-        document.documentElement.scrollHeight - 4;
-
-      if (reachedPageBottom || viewportFocus >= sectionBoundary) {
-        setActiveSection("missions");
-      } else if (viewportFocus >= howTop) {
-        setActiveSection("how");
-      } else {
-        setActiveSection("");
-      }
-    };
-
-    const handleScroll = () => {
-      if (!frameId) frameId = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    updateActiveSection();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
+    scrollRoot.scrollTop = 0;
+    setActiveSection("");
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
-      if (frameId) window.cancelAnimationFrame(frameId);
+      window.history.scrollRestoration = previousRestoration;
     };
   }, []);
+
+  useEffect(() => {
+    const scrollRoot = pageRef.current;
+    if (!scrollRoot) return;
+
+    let releaseTimer = 0;
+    let isChangingSection = false;
+
+    const releaseWheel = () => {
+      window.clearTimeout(releaseTimer);
+      releaseTimer = window.setTimeout(() => {
+        isChangingSection = false;
+      }, 720);
+    };
+
+    const handleSectionWheel = (event: WheelEvent) => {
+      const usesSectionScroll = window.matchMedia("(min-width: 1101px)").matches;
+
+      if (!usesSectionScroll || Math.abs(event.deltaY) < 8) return;
+
+      event.preventDefault();
+
+      if (isChangingSection) {
+        return;
+      }
+
+      const sectionNames = ["", "how", "missions"];
+      const currentIndex = sectionNames.indexOf(activeSection);
+      const direction = event.deltaY > 0 ? 1 : -1;
+      const nextIndex = Math.min(
+        sectionNames.length - 1,
+        Math.max(0, currentIndex + direction),
+      );
+
+      if (nextIndex === currentIndex) return;
+
+      isChangingSection = true;
+      setActiveSection(sectionNames[nextIndex]);
+      releaseWheel();
+    };
+
+    scrollRoot.addEventListener("wheel", handleSectionWheel, {
+      passive: false,
+    });
+
+    return () => {
+      scrollRoot.removeEventListener("wheel", handleSectionWheel);
+      window.clearTimeout(releaseTimer);
+    };
+  }, [activeSection]);
 
   function scrollToSection(
     event: React.MouseEvent<HTMLAnchorElement>,
     sectionId: "how" | "missions",
   ) {
     event.preventDefault();
-    const section = document.getElementById(sectionId);
-    if (!section) return;
-
-    const headerHeight = 64;
-    const visibleHeight = window.innerHeight - headerHeight;
-    const sectionCenter = section.offsetTop + section.offsetHeight * 0.5;
-    const targetTop = Math.max(
-      0,
-      sectionCenter - headerHeight - visibleHeight * 0.5,
-    );
-
     window.history.replaceState(null, "", `#${sectionId}`);
     setActiveSection(sectionId);
-    window.scrollTo({ top: targetTop, behavior: "smooth" });
+  }
+
+  function scrollToPage(index: number) {
+    const sectionName = ["", "how", "missions"][index];
+    setActiveSection(sectionName);
   }
 
   function createParty() {
@@ -170,7 +197,7 @@ export default function PartyHome() {
   }
 
   return (
-    <main className="party-home">
+    <main className="party-home" ref={pageRef}>
       <header className="party-header">
         <a className="brand" href="/">
           <img className="brand-mark" src="/icon.png" alt="" />
@@ -198,7 +225,30 @@ export default function PartyHome() {
         </nav>
       </header>
 
-      <section className="party-hero">
+      <nav className="section-pagination" aria-label="랜딩 페이지 섹션">
+        {["메인", "이용 방법", "미션 아이디어"].map((label, index) => {
+          const sectionName = ["", "how", "missions"][index];
+          const isActive = activeSection === sectionName;
+
+          return (
+            <button
+              type="button"
+              key={label}
+              className={isActive ? "active" : ""}
+              onClick={() => scrollToPage(index)}
+              aria-label={`${label} 섹션으로 이동`}
+              aria-current={isActive ? "true" : undefined}
+            >
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <section
+        className={`party-hero landing-panel ${activeSection === "" ? "active-section" : ""}`}
+        data-party-section="hero"
+      >
         <div className="party-hero-copy">
           <span className="eyebrow">
             <span /> DISCORD PARTY COMPANION
@@ -326,7 +376,11 @@ export default function PartyHome() {
         </div>
       </section>
 
-      <section className="how-section" id="how">
+      <section
+        className={`how-section landing-panel ${activeSection === "how" ? "active-section" : ""}`}
+        id="how"
+        data-party-section="how"
+      >
         <div className="section-title">
           <span>HOW IT WORKS</span>
           <h2>친구들과 바로 시작하세요</h2>
@@ -366,7 +420,11 @@ export default function PartyHome() {
         </div>
       </section>
 
-      <section className="mission-section" id="missions">
+      <section
+        className={`mission-section landing-panel ${activeSection === "missions" ? "active-section" : ""}`}
+        id="missions"
+        data-party-section="missions"
+      >
         <div className="section-title left">
           <span>MISSION IDEAS</span>
           <h2>오늘은 어떤 미션을 걸까요?</h2>
@@ -398,7 +456,7 @@ export default function PartyHome() {
         </div>
       </section>
 
-      <footer>
+      <footer className={activeSection === "missions" ? "active-section" : ""}>
         <a className="brand" href="/">
           <img className="brand-mark" src="/icon.png" alt="" />
           <span>
