@@ -106,7 +106,9 @@ export default function PartyHome() {
     };
 
     const handleSectionWheel = (event: WheelEvent) => {
-      const usesSectionScroll = window.matchMedia("(min-width: 1101px)").matches;
+      const usesSectionScroll = window.matchMedia(
+        "(min-width: 1101px)",
+      ).matches;
 
       if (!usesSectionScroll || Math.abs(event.deltaY) < 8) return;
 
@@ -457,13 +459,27 @@ export default function PartyHome() {
       </section>
 
       <footer className={activeSection === "missions" ? "active-section" : ""}>
-        <a className="brand" href="/">
-          <img className="brand-mark" src="/icon.png" alt="" />
-          <span>
-            PLAY<span>STAGE</span>
-          </span>
-        </a>
-        <p>친구들의 게임이 콘텐츠가 되는 곳.</p>
+        <div className="party-footer-brand">
+          <a className="brand" href="/">
+            <img className="brand-mark" src="/icon.png" alt="" />
+            <span>
+              PLAY<span>STAGE</span>
+            </span>
+          </a>
+          <small>© 2026 PLAYSTAGE</small>
+        </div>
+        <div className="party-footer-links">
+          <span>약관 및 정책</span>
+          <nav>
+            <a href="/terms">서비스 이용약관</a>
+            <a href="/privacy">개인정보 처리방침</a>
+            <a href="/copyright">저작권 정책</a>
+          </nav>
+        </div>
+        <div className="party-footer-service">
+          <span>서비스</span>
+          <p>친구들과 미션을 걸고 함께 즐기는 비공개 게임 파티.</p>
+        </div>
       </footer>
     </main>
   );
