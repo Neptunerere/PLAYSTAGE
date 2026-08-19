@@ -11,7 +11,8 @@
   </p>
 </div>
 
-![PLAYSTAGE 메인 화면](docs/images/hero.png)
+<img width="2560" height="1294" alt="image" src="https://github.com/user-attachments/assets/35cdb4b1-61d9-4519-880c-f4eedcc41092" />
+
 
 ## 게임 방송보다, 친구들과 노는 방법
 
