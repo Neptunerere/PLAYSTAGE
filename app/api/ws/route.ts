@@ -10,8 +10,13 @@ export function GET(request: Request) {
     (url.searchParams.get("room") || "main")
       .replace(/[^a-zA-Z0-9-]/g, "")
       .slice(0, 20) || "main";
+  const requestedRole = url.searchParams.get("role");
   const role =
-    url.searchParams.get("role") === "broadcaster" ? "broadcaster" : "viewer";
+    requestedRole === "broadcaster"
+      ? "broadcaster"
+      : requestedRole === "companion"
+        ? "companion"
+        : "viewer";
 
   return experimental_upgradeWebSocket((socket) => {
     registerRealtimeClient(socket, room, role);

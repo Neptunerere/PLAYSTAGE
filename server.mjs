@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { config } from "dotenv";
 import next from "next";
@@ -10,6 +10,7 @@ config({ quiet: true });
 
 const dev = !process.argv.includes("--production");
 const hostname = "0.0.0.0";
+const usedEffectReceipts = new Set();
 const port = Number(process.env.PORT || 3000);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -316,6 +317,18 @@ wss.on("connection", (socket, request, clientInfo) => {
       return;
     }
 
+    if (message.type === "companion-ready") {
+      try {
+        send(socket, {
+          type: "missions-sync",
+          missions: await getRoomMissions(roomId),
+        });
+      } catch (error) {
+        console.error("Failed to load companion missions", error);
+      }
+      return;
+    }
+
     if (message.type === "chat") {
       const text = String(message.text || "")
         .trim()
@@ -515,6 +528,39 @@ wss.on("connection", (socket, request, clientInfo) => {
             Math.max(0, Math.min(1, Number(y))),
           ]);
       broadcast(roomId, { type: "overlay", item: safeItem });
+      return;
+    }
+
+    if (message.type === "party-effect" && role === "viewer") {
+      if (
+        !["shake", "blackout", "blur", "sticker_rain"].includes(message.effect)
+      )
+        return;
+      const receipt = String(message.receipt || "");
+      const signature = String(message.signature || "");
+      const expected = createHmac(
+        "sha256",
+        process.env.DISCORD_CLIENT_SECRET || "playstage-local-effect",
+      )
+        .update(`${roomId}:${message.effect}:${receipt}`)
+        .digest("hex");
+      if (
+        !receipt ||
+        signature.length !== expected.length ||
+        !timingSafeEqual(Buffer.from(signature), Buffer.from(expected)) ||
+        usedEffectReceipts.has(receipt)
+      )
+        return;
+      usedEffectReceipts.add(receipt);
+      setTimeout(() => usedEffectReceipts.delete(receipt), 3_600_000);
+      broadcast(roomId, {
+        type: "party-effect",
+        effect: message.effect,
+        name: String(message.name || "친구")
+          .trim()
+          .slice(0, 24),
+        createdAt: Date.now(),
+      });
     }
   });
 
@@ -555,8 +601,13 @@ server.on("upgrade", (request, socket, head) => {
     (url.searchParams.get("room") || "main")
       .replace(/[^a-zA-Z0-9-]/g, "")
       .slice(0, 20) || "main";
+  const requestedRole = url.searchParams.get("role");
   const role =
-    url.searchParams.get("role") === "broadcaster" ? "broadcaster" : "viewer";
+    requestedRole === "broadcaster"
+      ? "broadcaster"
+      : requestedRole === "companion"
+        ? "companion"
+        : "viewer";
   wss.handleUpgrade(request, socket, head, (ws) =>
     wss.emit("connection", ws, request, { id: randomUUID(), roomId, role }),
   );

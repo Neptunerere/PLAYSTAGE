@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Cross2Icon,
-  CursorArrowIcon,
-  Pencil2Icon,
-  TrashIcon,
-} from "@radix-ui/react-icons";
+import { CursorArrowIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 import { PointerEvent, useEffect, useRef, useState } from "react";
 
 export type OverlayItem = {
@@ -19,16 +14,25 @@ export type OverlayItem = {
   createdAt: number;
 };
 
+export type PartyEffect = {
+  effect: "shake" | "blackout" | "blur" | "sticker_rain";
+  name?: string;
+  createdAt: number;
+};
+
 export default function PartyOverlay({
   items,
   send,
   host = false,
+  effect,
 }: {
   items: OverlayItem[];
   send?: (item: Omit<OverlayItem, "id" | "createdAt">) => void;
   host?: boolean;
+  effect?: PartyEffect | null;
 }) {
   const [tool, setTool] = useState<"ping" | "draw">("ping");
+  const [controlsVisible, setControlsVisible] = useState(false);
   const [local, setLocal] = useState<OverlayItem[]>([]);
   const drawing = useRef<Array<[number, number]> | null>(null);
   const layerRef = useRef<HTMLDivElement>(null);
@@ -84,11 +88,13 @@ export default function PartyOverlay({
 
   return (
     <div
-      className={`party-overlay ${send ? "interactive" : "host-overlay"}`}
+      className={`party-overlay ${send ? "interactive" : "host-overlay"} ${effect ? `effect-${effect.effect}` : ""}`}
       ref={layerRef}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
+      onPointerEnter={() => setControlsVisible(true)}
+      onPointerLeave={() => setControlsVisible(false)}
     >
       <svg viewBox="0 0 1000 562" preserveAspectRatio="none">
         {visible
@@ -135,7 +141,7 @@ export default function PartyOverlay({
         ))}
       {send && (
         <div
-          className="overlay-tools"
+          className={`overlay-tools ${controlsVisible ? "visible" : ""}`}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerMove={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
@@ -173,6 +179,33 @@ export default function PartyOverlay({
       )}
       {host && visible.length > 0 && (
         <span className="overlay-host-label">친구들이 화면에 반응 중!</span>
+      )}
+      {effect?.effect === "blackout" && (
+        <div className="party-effect-blackout">
+          <b>{effect.name || "친구"}의 암전!</b>
+        </div>
+      )}
+      {effect?.effect === "blur" && (
+        <div className="party-effect-blur">
+          <b>{effect.name || "친구"}의 시야 방해!</b>
+        </div>
+      )}
+      {effect?.effect === "sticker_rain" && (
+        <div className="party-effect-rain" aria-hidden="true">
+          {["😂", "🔥", "🎮", "💥", "👀", "✨", "😂", "🎯", "💙"].map(
+            (emoji, index) => (
+              <span
+                key={`${emoji}-${index}`}
+                style={{
+                  left: `${8 + index * 11}%`,
+                  animationDelay: `${index * 80}ms`,
+                }}
+              >
+                {emoji}
+              </span>
+            ),
+          )}
+        </div>
       )}
     </div>
   );

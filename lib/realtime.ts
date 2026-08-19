@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import type { WebSocket } from "ws";
 import { redis } from "./redis";
@@ -10,7 +10,7 @@ import {
 type Client = {
   id: string;
   room: string;
-  role: "broadcaster" | "viewer";
+  role: "broadcaster" | "viewer" | "companion";
   socket: WebSocket;
   clientKey?: string;
   name?: string;
@@ -90,7 +90,7 @@ async function deleteStaleRoom(room: string) {
 export function registerRealtimeClient(
   socket: WebSocket,
   room: string,
-  role: "broadcaster" | "viewer",
+  role: "broadcaster" | "viewer" | "companion",
 ) {
   const id = randomUUID();
   clients.set(id, { id, room, role, socket });
@@ -146,7 +146,7 @@ export function registerRealtimeClient(
 async function handleMessage(
   room: string,
   id: string,
-  role: "broadcaster" | "viewer",
+  role: "broadcaster" | "viewer" | "companion",
   socket: WebSocket,
   raw: string,
 ) {
@@ -169,6 +169,15 @@ async function handleMessage(
     return;
   }
   if (type === "missions-request" && role === "broadcaster") {
+    socket.send(
+      JSON.stringify({
+        type: "missions-sync",
+        missions: await getRoomMissions(room),
+      }),
+    );
+    return;
+  }
+  if (type === "companion-ready") {
     socket.send(
       JSON.stringify({
         type: "missions-sync",
@@ -404,5 +413,42 @@ async function handleMessage(
       return;
     const item = { ...source, id: randomUUID(), createdAt: Date.now() };
     await publish(room, { type, item });
+    return;
+  }
+  if (type === "party-effect" && role === "viewer") {
+    const effect = String(message.effect || "");
+    if (!["shake", "blackout", "blur", "sticker_rain"].includes(effect)) return;
+    const receipt = String(message.receipt || "");
+    const signature = String(message.signature || "");
+    const expected = createHmac(
+      "sha256",
+      process.env.DISCORD_CLIENT_SECRET || "playstage-local-effect",
+    )
+      .update(`${room}:${effect}:${receipt}`)
+      .digest("hex");
+    if (
+      !receipt ||
+      signature.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    )
+      return;
+    if (redis) {
+      const accepted = await redis.set(
+        `playstage:effect-receipt:${receipt}`,
+        "1",
+        "EX",
+        3600,
+        "NX",
+      );
+      if (!accepted) return;
+    }
+    await publish(room, {
+      type,
+      effect,
+      name: String(message.name || "친구")
+        .trim()
+        .slice(0, 24),
+      createdAt: Date.now(),
+    });
   }
 }

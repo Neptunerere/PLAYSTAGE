@@ -200,6 +200,59 @@
   align-items: center;
   gap: 12px;
 }
+.party-effect-shop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #343c49;
+  border-radius: 12px;
+  background: #171c24;
+  overflow-x: auto;
+}
+.party-effect-shop > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  white-space: nowrap;
+  color: #aeb8c8;
+}
+.party-effect-shop > div svg {
+  color: #20d8c9;
+}
+.party-effect-shop > div b {
+  color: #fff;
+  margin-left: 4px;
+}
+.party-effect-shop button {
+  border: 1px solid #394354;
+  border-radius: 9px;
+  background: #202631;
+  color: #e9edf5;
+  padding: 8px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.party-effect-shop button:hover {
+  transform: translateY(-2px);
+  border-color: #5f83ff;
+  background: #283249;
+}
+.party-effect-shop button small {
+  color: #76a0ff;
+  margin-left: 4px;
+}
+.party-effect-error {
+  color: #ff6e86;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .representative-countdown {
   margin-left: auto;
   display: inline-flex;
@@ -511,26 +564,52 @@
 }
 .chat-tab form {
   border-top: 1px solid #30353c;
-  padding: 10px;
+  padding: 12px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
+  background: #171b21;
 }
 .chat-tab form input {
   min-width: 0;
   flex: 1;
   background: #111419;
-  border: 1px solid #303640;
+  border: 1px solid #363e49;
   color: white;
-  border-radius: 6px;
-  padding: 10px;
+  border-radius: 10px;
+  padding: 10px 13px;
   font-size: 10px;
 }
+.chat-tab form input:focus {
+  border-color: #557fff;
+  box-shadow: 0 0 0 3px #4d7cff1a;
+  outline: none;
+}
 .chat-tab form button {
-  width: 34px;
-  border: 0;
-  border-radius: 6px;
-  background: #4d7cff;
+  min-width: 70px;
+  border: 1px solid #6790ff;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5d86ff, #416ff2);
   color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 5px 16px #315bcc33;
+  transition:
+    transform 150ms ease,
+    filter 150ms ease,
+    box-shadow 150ms ease;
+}
+.chat-tab form button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 8px 20px #315bcc4d;
+}
+.chat-tab form button svg {
+  width: 14px;
+  height: 14px;
 }
 .party-room .sidebar {
   min-height: 640px;
@@ -714,7 +793,7 @@
   }
 
   .chat-tab form button {
-    width: 42px;
+    min-width: 78px;
   }
 }
 @media (max-width: 900px) {
