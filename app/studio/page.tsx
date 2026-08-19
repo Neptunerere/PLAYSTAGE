@@ -19,10 +19,13 @@ import {
   TargetIcon,
   TrashIcon,
   UpdateIcon,
+  LightningBoltIcon,
 } from "@radix-ui/react-icons";
 import { Tabs, Toast } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import PartyOverlay, { OverlayItem } from "../components/party-overlay";
+import HostHud from "../components/host-hud";
 
 type Mission = {
   id: string;
@@ -49,6 +52,8 @@ type Msg = {
   role?: "broadcaster" | "viewer";
   mission?: Mission;
   missions?: Mission[];
+  effect?: "shake" | "blackout" | "blur" | "sticker_rain";
+  createdAt?: number;
 };
 type Chat = { id: string; name: string; text: string };
 
@@ -56,14 +61,29 @@ const iceDone = (pc: RTCPeerConnection) =>
   pc.iceGatheringState === "complete"
     ? Promise.resolve()
     : new Promise<void>((resolve) => {
+        let settled = false;
         const done = () => {
           if (pc.iceGatheringState === "complete") {
+            settled = true;
             pc.removeEventListener("icegatheringstatechange", done);
             resolve();
           }
         };
         pc.addEventListener("icegatheringstatechange", done);
+        window.setTimeout(() => {
+          if (settled) return;
+          pc.removeEventListener("icegatheringstatechange", done);
+          resolve();
+        }, 3000);
       });
+
+const peerConfig: RTCConfiguration = {
+  iceServers: [
+    {
+      urls: process.env.NEXT_PUBLIC_STUN_URL || "stun:stun.cloudflare.com:3478",
+    },
+  ],
+};
 
 let pendingRoomReservation: Promise<{ code: string }> | null = null;
 
@@ -101,10 +121,17 @@ export default function Studio() {
   const discordLoadingShownAt = useRef<number | null>(null);
   const reconnectDelay = useRef(1000);
   const peers = useRef(new Map<string, RTCPeerConnection>());
+  const offerQueue = useRef(new Map<string, Promise<void>>());
+  const hudWindow = useRef<Window | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+  const comboTimer = useRef<number | undefined>(undefined);
+  const warnedMission = useRef(new Set<string>());
 
   const [room, setRoom] = useState("");
   const [roomTitle, setRoomTitle] = useState("");
   const [live, setLive] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [captureEnded, setCaptureEnded] = useState(false);
   const [paused, setPaused] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -123,6 +150,79 @@ export default function Studio() {
   const [roomInitialized, setRoomInitialized] = useState(false);
   const [showDiscordLoading, setShowDiscordLoading] = useState(true);
   const [discordCreatedRoom, setDiscordCreatedRoom] = useState(false);
+  const [hudRoot, setHudRoot] = useState<HTMLElement | null>(null);
+  const [hudNow, setHudNow] = useState(Date.now());
+  const [reactionCombo, setReactionCombo] = useState(0);
+  const [partyEffect, setPartyEffect] = useState<
+    import("../components/party-overlay").PartyEffect | null
+  >(null);
+
+  function sound(kind: "reaction" | "chat" | "vote" | "warning" | "effect") {
+    const context = audioContext.current;
+    if (!context) return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = kind === "warning" ? "square" : "sine";
+    oscillator.frequency.value =
+      kind === "chat"
+        ? 520
+        : kind === "warning"
+          ? 880
+          : kind === "effect"
+            ? 180
+            : 680;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.18);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.2);
+  }
+
+  function bumpCombo(kind: "reaction" | "chat" | "vote" | "effect") {
+    sound(kind);
+    setReactionCombo((value) => value + 1);
+    window.clearTimeout(comboTimer.current);
+    comboTimer.current = window.setTimeout(() => setReactionCombo(0), 4000);
+  }
+
+  async function openHostHud() {
+    audioContext.current ||= new AudioContext();
+    await audioContext.current.resume();
+    const pipApi = (
+      window as Window & {
+        documentPictureInPicture?: {
+          requestWindow(options: {
+            width: number;
+            height: number;
+          }): Promise<Window>;
+        };
+      }
+    ).documentPictureInPicture;
+    const nextWindow = pipApi
+      ? await pipApi.requestWindow({ width: 420, height: 260 })
+      : window.open("", "playstage-host-hud", "popup,width=420,height=260");
+    if (!nextWindow) return;
+    nextWindow.document.title = "PLAYSTAGE Host HUD";
+    document
+      .querySelectorAll('link[rel="stylesheet"], style')
+      .forEach((node) =>
+        nextWindow.document.head.appendChild(node.cloneNode(true)),
+      );
+    const root = nextWindow.document.createElement("div");
+    nextWindow.document.body.appendChild(root);
+    nextWindow.document.body.className = "host-hud-window";
+    hudWindow.current = nextWindow;
+    setHudRoot(root);
+    nextWindow.addEventListener(
+      "pagehide",
+      () => {
+        hudWindow.current = null;
+        setHudRoot(null);
+      },
+      { once: true },
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -245,20 +345,53 @@ export default function Studio() {
     );
   }
 
-  async function offer(id: string, ws: WebSocket, source: MediaStream) {
-    peers.current.get(id)?.close();
-    const pc = new RTCPeerConnection({ iceServers: [] });
-    peers.current.set(id, pc);
-    source.getTracks().forEach((track) => pc.addTrack(track, source));
-    pc.onconnectionstatechange = syncViewerCount;
-    await pc.setLocalDescription(await pc.createOffer());
-    await iceDone(pc);
-    ws.send(
-      JSON.stringify({ type: "offer", target: id, offer: pc.localDescription }),
-    );
+  function offer(id: string, ws: WebSocket) {
+    const previous = offerQueue.current.get(id) || Promise.resolve();
+    const pending = previous
+      .catch(() => {})
+      .then(async () => {
+        const source = stream.current;
+        if (!source || ws.readyState !== WebSocket.OPEN) return;
+        peers.current.get(id)?.close();
+        const pc = new RTCPeerConnection(peerConfig);
+        peers.current.set(id, pc);
+        source.getTracks().forEach((track) => pc.addTrack(track, source));
+        const videoSender = pc
+          .getSenders()
+          .find((sender) => sender.track?.kind === "video");
+        if (videoSender) {
+          const parameters = videoSender.getParameters();
+          parameters.encodings ||= [{}];
+          parameters.encodings[0].maxFramerate = 60;
+          parameters.encodings[0].maxBitrate = 8_000_000;
+          await videoSender.setParameters(parameters).catch(() => {});
+        }
+        pc.onconnectionstatechange = () => {
+          syncViewerCount();
+          if (["failed", "closed"].includes(pc.connectionState)) {
+            if (peers.current.get(id) === pc) peers.current.delete(id);
+          }
+        };
+        await pc.setLocalDescription(await pc.createOffer());
+        await iceDone(pc);
+        if (ws.readyState === WebSocket.OPEN && peers.current.get(id) === pc)
+          ws.send(
+            JSON.stringify({
+              type: "offer",
+              target: id,
+              offer: pc.localDescription,
+            }),
+          );
+      })
+      .finally(() => {
+        if (offerQueue.current.get(id) === pending)
+          offerQueue.current.delete(id);
+      });
+    offerQueue.current.set(id, pending);
+    return pending;
   }
 
-  function connectBroadcaster(source: MediaStream) {
+  function connectBroadcaster() {
     setConnection("연결 중");
     const ws = new WebSocket(
       `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${process.env.NODE_ENV === "production" ? "/api/ws" : "/ws"}?room=${encodeURIComponent(room)}&role=broadcaster`,
@@ -278,7 +411,7 @@ export default function Studio() {
           ...current,
           [message.from!]: current[message.from!] || "친구",
         }));
-        await offer(message.from, ws, source);
+        await offer(message.from, ws);
       } else if (
         message.type === "viewer-profile" &&
         message.from &&
@@ -314,6 +447,8 @@ export default function Studio() {
                 message.item!,
               ],
         );
+        if (message.item.kind === "emoji" || message.item.kind === "ping")
+          bumpCombo("reaction");
       } else if (
         message.type === "chat" &&
         message.id &&
@@ -324,6 +459,7 @@ export default function Studio() {
           ...current.slice(-99),
           { id: message.id!, name: message.name!, text: message.text! },
         ]);
+        bumpCombo("chat");
       } else if (message.type === "missions-sync" && message.missions) {
         setMissions(message.missions);
       } else if (message.type === "mission" && message.mission) {
@@ -334,8 +470,22 @@ export default function Studio() {
             mission.id === message.mission!.id ? message.mission! : mission,
           ),
         );
+        bumpCombo("vote");
+      } else if (message.type === "party-effect" && message.effect) {
+        const next = {
+          effect: message.effect,
+          name: message.name,
+          createdAt: message.createdAt || Date.now(),
+        };
+        setPartyEffect(next);
+        bumpCombo("effect");
+        window.setTimeout(
+          () =>
+            setPartyEffect((current) => (current === next ? null : current)),
+          3200,
+        );
       } else if (message.type === "quality-request" && message.quality) {
-        const track = source.getVideoTracks()[0];
+        const track = stream.current?.getVideoTracks()[0];
         const sizes = {
           "1080": { width: 1920, height: 1080 },
           "720": { width: 1280, height: 720 },
@@ -348,9 +498,9 @@ export default function Studio() {
               ? {
                   width: { ideal: size.width },
                   height: { ideal: size.height },
-                  frameRate: { ideal: 30 },
+                  frameRate: { ideal: 60, max: 60 },
                 }
-              : { frameRate: { ideal: 30 } },
+              : { frameRate: { ideal: 60, max: 60 } },
           )
           .catch(() => {});
       }
@@ -358,9 +508,9 @@ export default function Studio() {
     ws.onclose = () => {
       setConnection("재연결 중");
       setLive(false);
-      if (stream.current === source && !stopping.current) {
+      if (roomCreated.current && !stopping.current) {
         reconnectTimer.current = window.setTimeout(
-          () => connectBroadcaster(source),
+          () => connectBroadcaster(),
           reconnectDelay.current,
         );
         reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30_000);
@@ -370,16 +520,36 @@ export default function Studio() {
 
   function bindStream(source: MediaStream) {
     stream.current = source;
+    setCaptureEnded(false);
     setAudioEnabled(source.getAudioTracks().some((track) => track.enabled));
     setPaused(false);
     if (preview.current) preview.current.srcObject = source;
     const videoTrack = source.getVideoTracks()[0];
-    if (videoTrack) videoTrack.onended = () => void stop();
+    if (videoTrack) videoTrack.onended = () => handleCaptureEnded(source);
+  }
+
+  function handleCaptureEnded(source: MediaStream) {
+    if (stream.current !== source || stopping.current) return;
+    source.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
+    stream.current = null;
+    if (preview.current) preview.current.srcObject = null;
+    peers.current.forEach((peer) => peer.close());
+    peers.current.clear();
+    setViewers(0);
+    setPaused(false);
+    setCaptureEnded(true);
+    send({ type: "broadcast-paused" });
+    setNotice(
+      "게임 창이 종료됐어요. 방은 유지되며 다음 화면을 선택할 수 있습니다.",
+    );
   }
 
   async function pickScreen() {
     return navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 30 },
+      video: { frameRate: { ideal: 60, max: 60 } },
       audio: true,
     });
   }
@@ -402,6 +572,7 @@ export default function Studio() {
         throw new Error(result?.error || "방 정보를 저장하지 못했습니다.");
       }
       roomCreated.current = true;
+      setSessionStarted(true);
       heartbeatTimer.current = window.setInterval(() => {
         void fetch(`/api/rooms/${encodeURIComponent(room)}`, {
           method: "PATCH",
@@ -409,7 +580,7 @@ export default function Studio() {
         });
       }, 10_000);
       bindStream(source);
-      connectBroadcaster(source);
+      connectBroadcaster();
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -511,6 +682,8 @@ export default function Studio() {
       setViewers(0);
       setParticipants({});
       setConnection("종료됨");
+      setSessionStarted(false);
+      setCaptureEnded(false);
     }
   }
 
@@ -539,7 +712,46 @@ export default function Studio() {
 
   const activeMission =
     missions.find((mission) => mission.status === "active") || missions[0];
-  const settingsDisabled = live || Boolean(stream.current);
+  const activeMissionTime = (() => {
+    if (!activeMission?.endsAt || activeMission.status !== "active")
+      return null;
+    const seconds = Math.max(
+      0,
+      Math.ceil((new Date(activeMission.endsAt).getTime() - hudNow) / 1000),
+    );
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    return {
+      seconds,
+      label:
+        hours > 0
+          ? `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`
+          : `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`,
+    };
+  })();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setHudNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!activeMission?.endsAt || activeMission.status !== "active") return;
+    const seconds = Math.ceil(
+      (new Date(activeMission.endsAt).getTime() - hudNow) / 1000,
+    );
+    const threshold = seconds <= 10 ? 10 : seconds <= 60 ? 60 : null;
+    const warningKey = `${activeMission.id}:${threshold}`;
+    if (threshold && seconds > 0 && !warnedMission.current.has(warningKey)) {
+      warnedMission.current.add(warningKey);
+      sound("warning");
+      setNotice(
+        `⏱️ ${activeMission.title} · 종료 ${threshold === 60 ? "1분" : "10초"} 전입니다.`,
+      );
+    }
+  }, [activeMission, hudNow]);
+  const settingsDisabled = sessionStarted;
   const inviteUrl =
     typeof window === "undefined" ? "" : `${location.origin}/live?room=${room}`;
   const videoTrack = stream.current?.getVideoTracks()[0];
@@ -767,8 +979,13 @@ export default function Studio() {
                       ● {connection}
                     </span>
                     <span>
-                      {settings?.width || "자동"}×{settings?.height || "자동"}
+                      {captureEnded
+                        ? "다음 화면 대기"
+                        : `${settings?.width || "자동"}×${settings?.height || "자동"}`}
                     </span>
+                    {!captureEnded && (
+                      <span>{Math.round(settings?.frameRate || 60)} FPS</span>
+                    )}
                     <span>
                       {audioEnabled ? "시스템 소리 ON" : "시스템 소리 OFF"}
                     </span>
@@ -778,7 +995,7 @@ export default function Studio() {
 
               <div className="studio-preview" ref={previewShell}>
                 <video ref={preview} autoPlay muted playsInline />
-                <PartyOverlay items={overlay} host />
+                <PartyOverlay items={overlay} host effect={partyEffect} />
                 {!settingsDisabled && (
                   <div className="preview-empty">
                     <DesktopIcon />
@@ -791,10 +1008,29 @@ export default function Studio() {
                     <b>화면 공유 일시정지</b>
                   </div>
                 )}
+                {captureEnded && (
+                  <div className="studio-capture-ended">
+                    <DesktopIcon />
+                    <b>게임 창이 종료됐어요</b>
+                    <p>파티방은 그대로 유지되고 있습니다.</p>
+                    <button type="button" onClick={() => void switchScreen()}>
+                      <UpdateIcon /> 다음 화면 선택
+                    </button>
+                  </div>
+                )}
                 {activeMission && settingsDisabled && (
                   <div className="studio-active-mission">
                     <span>진행 중인 미션</span>
                     <b>{activeMission.title}</b>
+                    {activeMissionTime && (
+                      <strong
+                        className={
+                          activeMissionTime.seconds <= 60 ? "danger" : ""
+                        }
+                      >
+                        ⏱ {activeMissionTime.label}
+                      </strong>
+                    )}
                     <small>
                       성공 {activeMission.success} · 실패 {activeMission.fail}
                     </small>
@@ -808,7 +1044,7 @@ export default function Studio() {
                       title="화면 전환"
                     >
                       <UpdateIcon />
-                      <span>화면 전환</span>
+                      <span>{captureEnded ? "화면 선택" : "화면 전환"}</span>
                     </button>
                     <button
                       type="button"
@@ -846,6 +1082,15 @@ export default function Studio() {
                         <EnterFullScreenIcon />
                       )}
                       <span>전체화면</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={hudRoot ? "active" : ""}
+                      onClick={() => void openHostHud()}
+                      title="호스트 미니 HUD"
+                    >
+                      <LightningBoltIcon />
+                      <span>미니 HUD</span>
                     </button>
                     <button
                       type="button"
@@ -973,6 +1218,18 @@ export default function Studio() {
           </div>
         )}
       </main>
+
+      {hudRoot &&
+        createPortal(
+          <HostHud
+            mission={activeMission}
+            messages={messages}
+            combo={reactionCombo}
+            now={hudNow}
+            onClose={() => hudWindow.current?.close()}
+          />,
+          hudRoot,
+        )}
 
       <Toast.Root
         className="room-copy-toast"

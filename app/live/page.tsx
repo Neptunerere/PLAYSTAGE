@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import {
+  ArrowRightIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
   ChevronDownIcon,
@@ -8,15 +9,18 @@ import {
   DiscordLogoIcon,
   EnterFullScreenIcon,
   ExitFullScreenIcon,
-  PaperPlaneIcon,
   PersonIcon,
   PlusIcon,
+  LightningBoltIcon,
   SpeakerLoudIcon,
   TargetIcon,
 } from "@radix-ui/react-icons";
 import { Dialog, Select, Tabs, Toast } from "radix-ui";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import PartyOverlay, { OverlayItem } from "../components/party-overlay";
+import PartyOverlay, {
+  OverlayItem,
+  PartyEffect,
+} from "../components/party-overlay";
 type Chat = { id: string; name: string; text: string };
 type Mission = {
   id: string;
@@ -48,19 +52,35 @@ type Msg = {
   vote?: "success" | "fail";
   quality?: "auto" | "1080" | "720" | "480";
   item?: OverlayItem;
+  effect?: PartyEffect["effect"];
+  createdAt?: number;
 };
 const iceDone = (pc: RTCPeerConnection) =>
   pc.iceGatheringState === "complete"
     ? Promise.resolve()
     : new Promise<void>((resolve) => {
+        let settled = false;
         const f = () => {
           if (pc.iceGatheringState === "complete") {
+            settled = true;
             pc.removeEventListener("icegatheringstatechange", f);
             resolve();
           }
         };
         pc.addEventListener("icegatheringstatechange", f);
+        window.setTimeout(() => {
+          if (settled) return;
+          pc.removeEventListener("icegatheringstatechange", f);
+          resolve();
+        }, 3000);
       });
+const peerConfig: RTCConfiguration = {
+  iceServers: [
+    {
+      urls: process.env.NEXT_PUBLIC_STUN_URL || "stun:stun.cloudflare.com:3478",
+    },
+  ],
+};
 export default function PartyRoom() {
   const video = useRef<HTMLVideoElement>(null),
     playerContainer = useRef<HTMLDivElement>(null),
@@ -88,6 +108,9 @@ export default function PartyRoom() {
     [myVotes, setMyVotes] = useState<Record<string, "success" | "fail">>({}),
     [quality, setQuality] = useState("auto"),
     [fullscreen, setFullscreen] = useState(false);
+  const [partyEffect, setPartyEffect] = useState<PartyEffect | null>(null);
+  const [pointBalance, setPointBalance] = useState(0);
+  const [effectError, setEffectError] = useState("");
   const [clientKey, setClientKey] = useState("");
   const [now, setNow] = useState(0);
 
@@ -124,6 +147,9 @@ export default function PartyRoom() {
     let cancelled = false;
     let reconnectDelay = 1000;
     let reconnectTimer: number | undefined;
+    let recoveryTimer: number | undefined;
+    let recoveryInterval: number | undefined;
+    let lastReadyAt = 0;
     let shouldReconnect = true;
     const requestedRoom =
       new URLSearchParams(location.search).get("room") || "pixel-quest";
@@ -148,6 +174,7 @@ export default function PartyRoom() {
         setRoomAvailable(true);
         if (result.room?.title) setRoomTitle(result.room.title);
         void refreshMyVotes(r);
+        void refreshPoints(r);
         setStatus(
           result.room?.status === "live"
             ? "방송 화면에 연결하는 중"
@@ -163,10 +190,30 @@ export default function PartyRoom() {
       );
       ws = currentWs;
       socket.current = currentWs;
+      const requestStream = (delay = 0) => {
+        window.clearTimeout(recoveryTimer);
+        recoveryTimer = window.setTimeout(() => {
+          if (
+            currentWs.readyState !== WebSocket.OPEN ||
+            Date.now() - lastReadyAt < 1200
+          )
+            return;
+          lastReadyAt = Date.now();
+          currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+        }, delay);
+      };
       currentWs.onopen = () => {
         reconnectDelay = 1000;
         setConnected(true);
-        currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+        requestStream();
+        recoveryInterval = window.setInterval(() => {
+          const track =
+            video.current?.srcObject instanceof MediaStream
+              ? video.current.srcObject.getVideoTracks()[0]
+              : null;
+          if (!track || track.readyState === "ended" || track.muted)
+            requestStream();
+        }, 4000);
         if (nickname)
           currentWs.send(
             JSON.stringify({
@@ -177,6 +224,8 @@ export default function PartyRoom() {
           );
       };
       currentWs.onclose = () => {
+        window.clearInterval(recoveryInterval);
+        window.clearTimeout(recoveryTimer);
         setConnected(false);
         if (!cancelled && shouldReconnect) {
           reconnectTimer = window.setTimeout(
@@ -191,15 +240,25 @@ export default function PartyRoom() {
         if (m.type === "room-info" && m.title) setRoomTitle(m.title);
         else if (m.type === "offer" && m.offer && m.from) {
           peer.current?.close();
-          const pc = new RTCPeerConnection({ iceServers: [] });
+          const pc = new RTCPeerConnection(peerConfig);
           peer.current = pc;
           pc.ontrack = ({ streams }) => {
             if (video.current && streams[0]) {
               video.current.srcObject = streams[0];
               video.current.muted = true;
               video.current.play().catch(() => {});
+              const track = streams[0].getVideoTracks()[0];
+              if (track) {
+                track.onended = () => requestStream(200);
+                track.onmute = () => requestStream(1200);
+              }
             }
             setStatus("LIVE");
+          };
+          pc.onconnectionstatechange = () => {
+            if (["failed", "closed"].includes(pc.connectionState))
+              requestStream(300);
+            else if (pc.connectionState === "disconnected") requestStream(1800);
           };
           await pc.setRemoteDescription(m.offer);
           await pc.setLocalDescription(await pc.createAnswer());
@@ -231,13 +290,29 @@ export default function PartyRoom() {
               ? []
               : [...v.filter((x) => Date.now() - x.createdAt < 6000), m.item!],
           );
-        else if (
+        else if (m.type === "party-effect" && m.effect) {
+          const next = {
+            effect: m.effect,
+            name: m.name,
+            createdAt: m.createdAt || Date.now(),
+          } as PartyEffect;
+          setPartyEffect(next);
+          window.setTimeout(
+            () =>
+              setPartyEffect((current) => (current === next ? null : current)),
+            3200,
+          );
+        } else if (
           m.type === "broadcast-started" ||
           m.type === "screen-changed" ||
           m.type === "broadcast-resumed"
         ) {
           setStatus("호스트의 화면을 다시 연결하는 중");
-          currentWs.send(JSON.stringify({ type: "viewer-ready" }));
+          peer.current?.close();
+          peer.current = null;
+          if (video.current) video.current.srcObject = null;
+          lastReadyAt = 0;
+          requestStream(120);
         } else if (m.type === "broadcast-paused") {
           setStatus("호스트가 화면 공유를 잠시 멈췄어요");
         } else if (m.type === "broadcast-reconnecting")
@@ -254,6 +329,8 @@ export default function PartyRoom() {
     return () => {
       cancelled = true;
       window.clearTimeout(reconnectTimer);
+      window.clearTimeout(recoveryTimer);
+      window.clearInterval(recoveryInterval);
       ws?.close();
       peer.current?.close();
     };
@@ -279,6 +356,34 @@ export default function PartyRoom() {
     };
     setDiscordConnected(Boolean(result.authenticated));
     setMyVotes(result.votes || {});
+  }
+  async function refreshPoints(roomCode = room) {
+    const response = await fetch(
+      `/api/party-effects?room=${encodeURIComponent(roomCode)}`,
+      { cache: "no-store" },
+    ).catch(() => null);
+    if (!response?.ok) return;
+    const result = (await response.json()) as { balance?: number };
+    setPointBalance(Number(result.balance || 0));
+  }
+  async function usePartyEffect(effect: PartyEffect["effect"]) {
+    setEffectError("");
+    const response = await fetch("/api/party-effects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room, effect }),
+    });
+    const result = (await response.json().catch(() => null)) as {
+      balance?: number;
+      error?: string;
+      event?: PartyEffect & { type: string };
+    } | null;
+    if (!response.ok || !result?.event) {
+      setEffectError(result?.error || "방해권을 사용하지 못했습니다.");
+      return;
+    }
+    setPointBalance(Number(result.balance || 0));
+    send(result.event);
   }
   async function voteMission(missionId: string, vote: "success" | "fail") {
     if (!discordConnected) {
@@ -409,6 +514,7 @@ export default function PartyRoom() {
               <PartyOverlay
                 items={overlay}
                 send={(item) => send({ type: "overlay", item })}
+                effect={partyEffect}
               />
               <div
                 className={status === "LIVE" ? "live-badge" : "stream-status"}
@@ -473,6 +579,36 @@ export default function PartyRoom() {
                   )}
                 </button>
               </div>
+            </div>
+            <div className="party-effect-shop">
+              <div>
+                <LightningBoltIcon /> <span>화면 방해권</span>
+                <b>{pointBalance}P</b>
+              </div>
+              <button
+                type="button"
+                onClick={() => void usePartyEffect("sticker_rain")}
+              >
+                😂 이모지 폭우 <small>15P</small>
+              </button>
+              <button
+                type="button"
+                onClick={() => void usePartyEffect("shake")}
+              >
+                💥 흔들기 <small>20P</small>
+              </button>
+              <button type="button" onClick={() => void usePartyEffect("blur")}>
+                🌫️ 흐리기 <small>30P</small>
+              </button>
+              <button
+                type="button"
+                onClick={() => void usePartyEffect("blackout")}
+              >
+                🌑 암전 <small>35P</small>
+              </button>
+              {effectError && (
+                <span className="party-effect-error">{effectError}</span>
+              )}
             </div>
             <div className="stream-title">
               <div>
@@ -667,7 +803,8 @@ export default function PartyRoom() {
                     placeholder="메시지를 입력하세요"
                   />
                   <button disabled={!chat.trim()}>
-                    <PaperPlaneIcon />
+                    <span>전송</span>
+                    <ArrowRightIcon />
                   </button>
                 </form>
               </Tabs.Content>
